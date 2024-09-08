@@ -1,4 +1,4 @@
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 
 /// Enumeración de posibles errores que pueden ocurrir durante la ejecución de las consultas SQL.
 ///

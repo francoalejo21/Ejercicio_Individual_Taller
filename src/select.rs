@@ -1,11 +1,11 @@
 use crate::archivo::{self, leer_archivo, procesar_ruta};
-use crate::consulta::{mapear_campos, obtener_campos_consulta_orden_por_defecto, MetodosConsulta, Parseables, Verificaciones};
+use crate::consulta::{
+    mapear_campos, obtener_campos_consulta_orden_por_defecto, MetodosConsulta, Parseables,
+    Verificaciones,
+};
 use crate::errores;
 use archivo::parsear_linea_archivo;
-use std::{
-    collections::HashMap,
-    io::BufRead,
-};
+use std::{collections::HashMap, io::BufRead};
 //TODO: implementar restricciones, ordenamiento y mejorar el parseo
 
 /// Representa una consulta SQL de selección.
@@ -37,7 +37,7 @@ pub struct ConsultaSelect {
     pub tabla: String,
     pub restricciones: Vec<String>,
     pub ordenamiento: Vec<String>,
-    pub ruta_tabla : String,
+    pub ruta_tabla: String,
 }
 
 impl ConsultaSelect {
@@ -82,7 +82,7 @@ impl ConsultaSelect {
     ///
     /// # Retorno
     /// Retorna un `Vec<String>` que contiene cada palabra de la consulta SQL.
-    
+
     fn parsear_consulta_de_comando_select(consulta: &String) -> Vec<String> {
         return consulta
             .replace(",", " ")
@@ -91,7 +91,6 @@ impl ConsultaSelect {
             .map(|s| s.to_string())
             .collect();
     }
-
 }
 
 impl Parseables for ConsultaSelect {
@@ -105,7 +104,7 @@ impl Parseables for ConsultaSelect {
     ///
     /// # Retorno
     /// Un `Vec<String>` que contiene los nombres de los campos a consultar.
-   
+
     fn parsear_campos(consulta: &Vec<String>, index: &mut usize) -> Vec<String> {
         let mut campos: Vec<String> = Vec::new();
         while *index < consulta.len() && consulta[*index] != "from" {
@@ -217,14 +216,16 @@ impl MetodosConsulta for ConsultaSelect {
     /// Retorna un `Result` que indica el éxito (`Ok`) o el tipo de error (`Err`).
 
     fn verificar_validez_consulta(&mut self) -> Result<(), errores::Errores> {
-        match leer_archivo(&self.ruta_tabla){
-            Ok(mut lector)=>{
-        let mut nombres_campos = String::new();
-        lector.read_line(&mut nombres_campos).map_err(|_| errores::Errores::Error)?;
-        let (_, campos_validos) = &parsear_linea_archivo(&nombres_campos);
-        self.campos_posibles = mapear_campos(campos_validos);
-        },
-            Err(_)=>return Err(errores::Errores::InvalidTable)
+        match leer_archivo(&self.ruta_tabla) {
+            Ok(mut lector) => {
+                let mut nombres_campos = String::new();
+                lector
+                    .read_line(&mut nombres_campos)
+                    .map_err(|_| errores::Errores::Error)?;
+                let (_, campos_validos) = &parsear_linea_archivo(&nombres_campos);
+                self.campos_posibles = mapear_campos(campos_validos);
+            }
+            Err(_) => return Err(errores::Errores::InvalidTable),
         };
         if self.campos_consulta.is_empty() {
             return Err(errores::Errores::InvalidSyntax);
@@ -246,10 +247,12 @@ impl MetodosConsulta for ConsultaSelect {
     fn procesar(&mut self) -> Result<(), errores::Errores> {
         //primera version select normal sin condiciones;
         let mut lector =
-        leer_archivo(&self.ruta_tabla).map_err(|_| errores::Errores::InvalidTable)?;
+            leer_archivo(&self.ruta_tabla).map_err(|_| errores::Errores::InvalidTable)?;
 
         let mut nombres_campos = String::new();
-        lector.read_line(&mut nombres_campos).map_err(|_| errores::Errores::Error)?;
+        lector
+            .read_line(&mut nombres_campos)
+            .map_err(|_| errores::Errores::Error)?;
 
         for registro in lector.lines() {
             let (registro_parseado, _) = match registro {
@@ -290,18 +293,18 @@ impl Verificaciones for ConsultaSelect {
         campos_validos: &HashMap<String, usize>,
         campos_consulta: &mut Vec<String>,
     ) -> bool {
-        if campos_consulta.len() == 1{
-            if campos_consulta[0] == "*".to_string(){
+        if campos_consulta.len() == 1 {
+            if campos_consulta[0] == "*".to_string() {
                 campos_consulta.pop(); //Me saco de encima el "*""
-                //debo reemplazar ese caracter por todos los campos válidos
+                                       //debo reemplazar ese caracter por todos los campos válidos
                 let campos = &obtener_campos_consulta_orden_por_defecto(campos_validos);
-                for campo in campos{
+                for campo in campos {
                     campos_consulta.push(campo.to_string());
                 }
                 return true;
-            }   
+            }
         }
-    
+
         for campo in campos_consulta {
             if !(campos_validos.contains_key(campo)) {
                 return false;
@@ -318,27 +321,35 @@ mod tests {
 
     #[test]
     fn test_parsear_consulta_select() {
-        let consulta = String::from("SELECT campo1, campo2 FROM tabla WHERE campo1 = 'valor1' ORDER BY campo2 DESC");
+        let consulta = String::from(
+            "SELECT campo1, campo2 FROM tabla WHERE campo1 = 'valor1' ORDER BY campo2 DESC",
+        );
         let tokens = ConsultaSelect::parsear_consulta_de_comando_select(&consulta);
 
         assert_eq!(
             tokens,
             vec![
-                "select", "campo1", "campo2", "from", "tabla", "where", "campo1", "=", "'valor1'", "order", "by", "campo2", "desc"
+                "select", "campo1", "campo2", "from", "tabla", "where", "campo1", "=", "'valor1'",
+                "order", "by", "campo2", "desc"
             ]
         );
     }
 
     #[test]
     fn test_crear_consulta_select() {
-        let consulta = String::from("SELECT campo1, campo2 FROM tabla WHERE campo1 = 'valor1' ORDER BY campo2 DESC");
+        let consulta = String::from(
+            "SELECT campo1, campo2 FROM tabla WHERE campo1 = 'valor1' ORDER BY campo2 DESC",
+        );
         let ruta_tabla = String::from("/ruta/a/tablas");
 
         let consulta_select = ConsultaSelect::crear(&consulta, &ruta_tabla);
 
         assert_eq!(consulta_select.campos_consulta, vec!["campo1", "campo2"]);
         assert_eq!(consulta_select.tabla, "tabla");
-        assert_eq!(consulta_select.restricciones, vec!["campo1", "=", "'valor1'"]);
+        assert_eq!(
+            consulta_select.restricciones,
+            vec!["campo1", "=", "'valor1'"]
+        );
         assert_eq!(consulta_select.ordenamiento, vec!["campo2", "desc"]);
         assert_eq!(consulta_select.ruta_tabla, "/ruta/a/tablas/tabla");
     }
@@ -350,7 +361,8 @@ mod tests {
         campos_validos.insert("campo2".to_string(), 1);
 
         let mut campos_consulta = vec!["campo1".to_string(), "campo2".to_string()];
-        let resultado = ConsultaSelect::verificar_campos_validos(&campos_validos, &mut campos_consulta);
+        let resultado =
+            ConsultaSelect::verificar_campos_validos(&campos_validos, &mut campos_consulta);
 
         assert!(resultado);
     }
@@ -361,7 +373,8 @@ mod tests {
         campos_validos.insert("campo1".to_string(), 0);
 
         let mut campos_consulta = vec!["campo1".to_string(), "campo3".to_string()];
-        let resultado = ConsultaSelect::verificar_campos_validos(&campos_validos, &mut campos_consulta);
+        let resultado =
+            ConsultaSelect::verificar_campos_validos(&campos_validos, &mut campos_consulta);
 
         assert!(!resultado);
     }

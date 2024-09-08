@@ -28,11 +28,11 @@ pub trait MetodosConsulta {
     /// - `Ok(())`: Si la consulta es válida.
     /// - `Err(errores::Errores::InvalidSyntax)`: Si faltan campos en la consulta.
     /// - `Err(errores::Errores::InvalidColumn)`: Si la consulta contiene columnas inválidas.
-    
+
     fn verificar_validez_consulta(&mut self) -> Result<(), errores::Errores>;
 
-    /// Procesa la consulta 
-    /// 
+    /// Procesa la consulta
+    ///
     /// # Retorno
     /// Retorna `Ok(())` si la consulta fue exitosa o un error si hubo algún problema al procesarla.
 
@@ -48,24 +48,24 @@ pub enum SQLConsulta {
 
 impl SQLConsulta {
     //Documentar cuando la tenga terminada
-    pub fn crear_consulta(consulta: &String, ruta_tablas: &String) -> Result<SQLConsulta, errores::Errores> {
+    pub fn crear_consulta(
+        consulta: &String,
+        ruta_tablas: &String,
+    ) -> Result<SQLConsulta, errores::Errores> {
         // Primero eliminamos los espacios al inicio y convertimos la consulta a minúsculas
         let consulta_limpia = &consulta.trim_start().to_lowercase();
 
         // Usamos match para decidir el tipo de consulta
         match consulta_limpia.as_str() {
-            _ if consulta_limpia.starts_with("select") => {
-                Ok(SQLConsulta::Select(ConsultaSelect::crear(consulta_limpia, ruta_tablas)))
-            }
-            _ if consulta_limpia.starts_with("insert into") => {
-                Ok(SQLConsulta::Insert(ConsultaInsert::crear(
-                    consulta_limpia,
-                    ruta_tablas,
-                )))
-            }
+            _ if consulta_limpia.starts_with("select") => Ok(SQLConsulta::Select(
+                ConsultaSelect::crear(consulta_limpia, ruta_tablas),
+            )),
+            _ if consulta_limpia.starts_with("insert into") => Ok(SQLConsulta::Insert(
+                ConsultaInsert::crear(consulta_limpia, ruta_tablas),
+            )),
             _ => {
                 // En caso de que no coincida con ninguna consulta soportada, retornamos un error
-                return Err(errores::Errores::InvalidSyntax)
+                return Err(errores::Errores::InvalidSyntax);
             }
         }
     }
@@ -90,7 +90,6 @@ impl SQLConsulta {
             SQLConsulta::Insert(consulta_insert) => consulta_insert.verificar_validez_consulta(),
         }
     }
-
 }
 
 pub fn mapear_campos(campos: &Vec<String>) -> HashMap<String, usize> {
@@ -104,16 +103,19 @@ pub fn mapear_campos(campos: &Vec<String>) -> HashMap<String, usize> {
     return campos_mapeados;
 }
 pub trait Verificaciones {
-    fn verificar_campos_validos( campos_validos: &HashMap<String, usize>, campos_consulta: &mut Vec<String>,) -> bool;
+    fn verificar_campos_validos(
+        campos_validos: &HashMap<String, usize>,
+        campos_consulta: &mut Vec<String>,
+    ) -> bool;
 }
 
 pub fn obtener_campos_consulta_orden_por_defecto(campos: &HashMap<String, usize>) -> Vec<String> {
     // Convertimos el HashMap en un vector de pares (clave, valor)
     let mut vec: Vec<(&String, &usize)> = campos.iter().collect();
-    
+
     // Ordenamos el vector por el valor
     vec.sort_by(|a, b| a.1.cmp(b.1));
-    
+
     let mut campos_tabla: Vec<String> = Vec::new();
     // Iteramos sobre los pares ordenados
     for (key, _value) in vec {
@@ -178,7 +180,6 @@ mod tests {
             _ => assert!(false, "Se esperaba una consulta de tipo INSERT"),
         }
     }
-
 
     #[test]
     fn test_crear_consulta_invalida() {

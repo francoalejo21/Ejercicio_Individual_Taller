@@ -1,11 +1,11 @@
-use crate::archivo::{procesar_ruta, leer_archivo, parsear_linea_archivo};
-use crate::consulta::{Verificaciones, MetodosConsulta, Parseables, mapear_campos};
+use crate::archivo::{leer_archivo, parsear_linea_archivo, procesar_ruta};
+use crate::consulta::{mapear_campos, MetodosConsulta, Parseables, Verificaciones};
 use crate::errores;
 use std::fs::OpenOptions;
 use std::path::Path;
 use std::{
     collections::HashMap,
-    io::{BufWriter, Write, BufRead},
+    io::{BufRead, BufWriter, Write},
 };
 
 /// Representa una consulta SQL de inserción.
@@ -57,7 +57,7 @@ impl ConsultaInsert {
         let valores = Self::parsear_valores(consulta_parseada, &mut index);
         let campos_posibles: HashMap<String, usize> = HashMap::new();
         let ruta_tabla = procesar_ruta(&ruta_a_tablas, &tabla);
-    
+
         ConsultaInsert {
             campos_consulta,
             campos_posibles,
@@ -84,7 +84,6 @@ impl ConsultaInsert {
             .map(|s| s.to_string())
             .collect();
     }
-
 }
 
 impl Parseables for ConsultaInsert {
@@ -176,22 +175,24 @@ impl Parseables for ConsultaInsert {
 impl MetodosConsulta for ConsultaInsert {
     /// Verifica la validez de la consulta SQL.
     ///TODO: verificar la validez de los valores a ingresar
-    /// verifica que la tabla a la que se quiere inserta exista, así como los campos de la consulta no estén vacíos 
+    /// verifica que la tabla a la que se quiere inserta exista, así como los campos de la consulta no estén vacíos
     /// y que todos los campos solicitados sean válidos según los campos posibles definidos en la estructura.
     /// # Retorno
     /// Retorna un `Result` que indica el éxito (`Ok`) o el tipo de error (`Err`).
 
     fn verificar_validez_consulta(&mut self) -> Result<(), errores::Errores> {
-        match leer_archivo(&self.ruta_tabla){
-            Ok(mut lector)=>{
-        let mut nombres_campos = String::new();
-        lector.read_line(&mut nombres_campos).map_err(|_| errores::Errores::Error)?;
-        let (_, campos_validos) = parsear_linea_archivo(&nombres_campos);
-        self.campos_posibles = mapear_campos(&campos_validos);
-        },
-            Err(_)=>return Err(errores::Errores::InvalidTable)
+        match leer_archivo(&self.ruta_tabla) {
+            Ok(mut lector) => {
+                let mut nombres_campos = String::new();
+                lector
+                    .read_line(&mut nombres_campos)
+                    .map_err(|_| errores::Errores::Error)?;
+                let (_, campos_validos) = parsear_linea_archivo(&nombres_campos);
+                self.campos_posibles = mapear_campos(&campos_validos);
+            }
+            Err(_) => return Err(errores::Errores::InvalidTable),
         };
-        
+
         if self.campos_consulta.is_empty() {
             return Err(errores::Errores::InvalidSyntax);
         }
@@ -230,9 +231,9 @@ impl MetodosConsulta for ConsultaInsert {
         }
 
         // Asegurarse de escribir en el archivo
-        match escritor.flush(){
-            Ok(_)=>{},
-            Err(_)=> return Err(errores::Errores::Error) //error al escribir
+        match escritor.flush() {
+            Ok(_) => {}
+            Err(_) => return Err(errores::Errores::Error), //error al escribir
         }
         Ok(())
     }
@@ -256,7 +257,7 @@ impl Verificaciones for ConsultaInsert {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    
+
     #[test]
     fn test_verificacion_campos_validos() {
         let mut campos_validos: HashMap<String, usize> = HashMap::new();
@@ -264,9 +265,15 @@ mod tests {
         campos_validos.insert("edad".to_string(), 1);
 
         let mut campos_consulta = vec!["nombre".to_string(), "edad".to_string()];
-        assert!(ConsultaInsert::verificar_campos_validos(&campos_validos, &mut campos_consulta));
+        assert!(ConsultaInsert::verificar_campos_validos(
+            &campos_validos,
+            &mut campos_consulta
+        ));
 
         let mut campos_invalidos = vec!["nombre".to_string(), "altura".to_string()];
-        assert!(!ConsultaInsert::verificar_campos_validos(&campos_validos, &mut campos_invalidos));
+        assert!(!ConsultaInsert::verificar_campos_validos(
+            &campos_validos,
+            &mut campos_invalidos
+        ));
     }
 }
