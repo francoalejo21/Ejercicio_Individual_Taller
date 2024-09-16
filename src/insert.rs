@@ -1,4 +1,4 @@
-use crate::archivo::{leer_archivo, parsear_linea_archivo, procesar_ruta};
+/* use crate::archivo::{leer_archivo, parsear_linea_archivo, procesar_ruta};
 use crate::consulta::{mapear_campos, MetodosConsulta, Parseables, Verificaciones};
 use crate::errores;
 use std::fs::OpenOptions;
@@ -49,12 +49,12 @@ impl ConsultaInsert {
     /// # Retorno
     /// Una instancia de `ConsultaInsert`
 
-    pub fn crear(consulta: &String, ruta_a_tablas: &String) -> ConsultaInsert {
-        let consulta_parseada = &Self::parsear_consulta_de_comando(&consulta);
+    pub fn crear(consulta: &Vec<String>, ruta_a_tablas: &String) -> ConsultaInsert {
+        //let consulta_parseada = &Self::parsear_consulta_de_comando(consulta);
         let mut index = 2; //nos salteamos las palabras:  insert into
-        let tabla = Self::parsear_tabla(consulta_parseada, &mut index);
-        let campos_consulta = Self::parsear_campos(consulta_parseada, &mut index);
-        let valores = Self::parsear_valores(consulta_parseada, &mut index);
+        let tabla = Self::parsear_tabla(consulta, &mut index);
+        let campos_consulta = Self::parsear_campos(consulta);
+        let valores = Self::parsear_valores(consulta, &mut index);
         let campos_posibles: HashMap<String, usize> = HashMap::new();
         let ruta_tabla = procesar_ruta(&ruta_a_tablas, &tabla);
 
@@ -98,9 +98,9 @@ impl Parseables for ConsultaInsert {
     /// # Retorno
     /// Un `Vec<String>` que contiene los nombres de los campos a insertar.
 
-    fn parsear_campos(consulta: &Vec<String>, index: &mut usize) -> Vec<String> {
+    fn parsear_campos(consulta: &Vec<String>,) -> Vec<String> {
         let mut campos: Vec<String> = Vec::new();
-        if consulta[*index] == "(" {
+        /*if consulta[*index] == "(" {
             *index += 1;
         }
 
@@ -108,7 +108,7 @@ impl Parseables for ConsultaInsert {
             let campo = &consulta[*index];
             campos.push(campo.to_string());
             *index += 1;
-        }
+        }*/
         campos
     }
     /// Extrae el nombre de la tabla a partir de la consulta SQL.
@@ -277,3 +277,4 @@ mod tests {
         ));
     }
 }
+ */

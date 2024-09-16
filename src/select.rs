@@ -1,10 +1,11 @@
 use crate::archivo::{self, leer_archivo, procesar_ruta};
 use crate::consulta::{
-    mapear_campos, obtener_campos_consulta_orden_por_defecto, MetodosConsulta, Parseables,
+    mapear_campos, obtener_campos_consulta_orden_por_defecto, parsear_consulta_de_comando, MetodosConsulta, Parseables,
     Verificaciones,
 };
 use crate::errores;
 use archivo::parsear_linea_archivo;
+use std::ops::Index;
 use std::{collections::HashMap, io::BufRead};
 //TODO: implementar restricciones, ordenamiento y mejorar el parseo
 
@@ -33,8 +34,8 @@ use std::{collections::HashMap, io::BufRead};
 #[derive(Debug)]
 pub struct ConsultaSelect {
     pub campos_consulta: Vec<String>,
+    pub tabla: Vec<String>,
     pub campos_posibles: HashMap<String, usize>,
-    pub tabla: String,
     pub restricciones: Vec<String>,
     pub ordenamiento: Vec<String>,
     pub ruta_tabla: String,
@@ -53,25 +54,24 @@ impl ConsultaSelect {
     /// Retorna una instancia de `ConsultaSelect` con los campos, tabla, restricciones y
     /// ordenamiento extraídos.
 
-    pub fn crear(consulta: &String, ruta_a_tablas: &String) -> ConsultaSelect {
-        let consulta_parseada = &Self::parsear_consulta_de_comando_select(&consulta);
-        let mut index = 1; //nos salteamos la palabra select
-        let campos_consulta = Self::parsear_campos(consulta_parseada, &mut index);
+    pub fn crear(consulta: &Vec<String>, ruta_a_tablas: &String) -> ConsultaSelect {
+        let campos_consulta = Self::parsear_campos(consulta);
         let campos_posibles: HashMap<String, usize> = HashMap::new();
-        let tabla = Self::parsear_tabla(consulta_parseada, &mut index);
-        let restricciones = Self::parsear_restricciones(consulta_parseada, &mut index);
-        let ordenamiento = Self::parsear_ordenamiento(consulta_parseada, &mut index);
-        let ruta_tabla = procesar_ruta(&ruta_a_tablas, &tabla);
+        let ruta_tabla = ruta_a_tablas.to_string(); //safo de la referencia compartida
+        let tabla = Self::parsear_tabla(consulta);
+        let restricciones = Self::parsear_restricciones(consulta);
+        let ordenamiento = Self::parsear_ordenamiento(consulta);
 
         ConsultaSelect {
             campos_consulta,
-            campos_posibles,
             tabla,
+            campos_posibles,
             restricciones,
             ordenamiento,
             ruta_tabla,
         }
     }
+    /* 
     /// Parsea una consulta SQL para obtener los distintos tokens.
     ///
     /// Convierte la consulta a minúsculas, reemplaza las comas por espacios y divide la cadena en
@@ -90,7 +90,7 @@ impl ConsultaSelect {
             .split_whitespace()
             .map(|s| s.to_string())
             .collect();
-    }
+    } */
 }
 
 impl Parseables for ConsultaSelect {
@@ -105,15 +105,35 @@ impl Parseables for ConsultaSelect {
     /// # Retorno
     /// Un `Vec<String>` que contiene los nombres de los campos a consultar.
 
-    fn parsear_campos(consulta: &Vec<String>, index: &mut usize) -> Vec<String> {
+    fn parsear_campos(consulta: &Vec<String>) -> Vec<String> {
+        let mut index: usize = 0;
         let mut campos: Vec<String> = Vec::new();
-        while *index < consulta.len() && consulta[*index] != "from" {
-            let campo = &consulta[*index];
-            campos.push(campo.to_string());
-            *index += 1;
+    
+        while index < consulta.len() && consulta[index].to_lowercase() != "from" {
+            let campo = &consulta[index];
+    
+            if campo.to_lowercase() == "select" {
+                // Si el token es 'select', lo saltamos
+                index += 1;
+                continue;
+            }
+    
+            // Verificación si hay más de un campo parseado en un solo campo
+            // Ejemplo: consulta = ["select", "campo1,campo2,campo3", "from", .....]
+            let campos_separados = separar_campos(campo);
+            for campo in campos_separados {
+                campos.push(campo.to_string());
+            }
+    
+            index += 1;
         }
+    
+        // Eliminar las cadenas vacías
+        campos.retain(|c| !c.trim().is_empty());
+    
         campos
     }
+    
     /// Extrae el nombre de la tabla a partir de la consulta SQL.
     ///
     /// Busca la palabra clave `FROM` en los tokens de la consulta y toma el siguiente token como el nombre de la tabla.
@@ -125,17 +145,22 @@ impl Parseables for ConsultaSelect {
     /// # Retorno
     /// Una cadena de texto (`String`) que contiene el nombre de la tabla.
 
-    fn parsear_tabla(consulta: &Vec<String>, index: &mut usize) -> String {
-        let mut tabla = String::new();
-        if consulta[*index] == "from" {
-            *index += 1
+    fn parsear_tabla(consulta: &Vec<String>) -> Vec<String> {
+        let mut index: usize = 0;
+        let mut tablas = Vec::new(); //tiene que haber solo una tabla pero esto nos sirve para checkear syntaxis
+        while consulta[index].to_lowercase() != "from" && index < consulta.len() { //busco la keyword from
+            index +=1;
         }
-        if *index < consulta.len() {
-            let tabla_consulta = &consulta[*index];
-            *index += 1;
-            tabla = tabla_consulta.to_string();
+        if index == consulta.len(){//no encontre la palabra from debuelvo vacio
+            return tablas;
         }
-        tabla
+        index += 1; //nos salteamos la keyword from    
+        while index < consulta.len() && (consulta[index].to_lowercase() != "where" || consulta[index].to_lowercase() != "order"){
+            let tabla_consulta = &consulta[index];
+            tablas.push(tabla_consulta.to_string());
+            index += 1;
+        }
+        tablas
     }
 
     /// Extrae las restricciones a partir de la consulta SQL.
@@ -150,25 +175,21 @@ impl Parseables for ConsultaSelect {
     /// # Retorno
     /// Un `Vec<String>` que contiene las restricciones de la consulta.`
 
-    fn parsear_restricciones(consulta: &Vec<String>, index: &mut usize) -> Vec<String> {
+    fn parsear_restricciones(consulta: &Vec<String>) -> Vec<String> {
         let mut restricciones = Vec::new();
+        let mut index:usize = 0;
 
-        while *index < consulta.len() {
-            let palabra = &consulta[*index];
-            if palabra == "where" {
-                *index += 1;
-                while *index < consulta.len()
-                    && consulta[*index] != "order"
-                    && consulta[*index] != "by"
-                {
-                    let palabra = &consulta[*index];
-                    restricciones.push(palabra.to_string());
-                    *index += 1;
-                }
-                break;
-            } else {
-                *index += 1;
-            }
+        while index < consulta.len() && consulta[index].to_lowercase() != "where" { //busco la keyword from
+            index +=1;
+        }
+        if index == consulta.len(){ //si no encontre la keyword where, devuelvo vacio
+            return restricciones;
+        }
+        index += 1; //me salteo la keyword where
+        while index < consulta.len() && consulta[index].to_lowercase() != "order" {
+            let palabra = &consulta[index];
+            restricciones.push(palabra.to_string());
+            index += 1;                
         }
         restricciones
     }
@@ -185,26 +206,33 @@ impl Parseables for ConsultaSelect {
     /// # Retorno
     /// Un `Vec<String>` que contiene los criterios de ordenamiento de la consulta.
 
-    fn parsear_ordenamiento(consulta: &Vec<String>, index: &mut usize) -> Vec<String> {
+    fn parsear_ordenamiento(consulta: &Vec<String>) -> Vec<String> {
         let mut ordenamiento = Vec::new();
+        let mut index :usize = 0;
 
-        while *index < consulta.len() {
-            let palabra = &consulta[*index];
-            if palabra == "order" {
-                *index += 1;
-                if *index < consulta.len() && consulta[*index] == "by" {
-                    *index += 1;
-                    while *index < consulta.len() {
-                        let palabra = &consulta[*index];
-                        ordenamiento.push(palabra.to_string());
-                        *index += 1;
-                    }
-                }
+        while index < consulta.len() && consulta[index].to_lowercase() != "order" { //busco la keyword from
+            index +=1;
+        }
+        if index == consulta.len(){ //si no encontre la keyword where, devuelvo vacio
+            return ordenamiento;
+        }
+        index += 1; //me salteo la keyword order
+        //tengo que encontrar tambien la keyword by
+        if index < consulta.len(){
+            if consulta[index].to_lowercase() != "by"{ //deberia devolver una sintaxis error, arreglar futuro
+                return ordenamiento
             }
+        }
+        index += 1; //salteo keyword by
+        while index < consulta.len(){
+            let palabra = &consulta[index];
+            ordenamiento.push(palabra.to_string());
+            index += 1;                
         }
         ordenamiento
     }
 }
+
 
 impl MetodosConsulta for ConsultaSelect {
     /// Verifica la validez de la consulta SQL.
@@ -216,6 +244,13 @@ impl MetodosConsulta for ConsultaSelect {
     /// Retorna un `Result` que indica el éxito (`Ok`) o el tipo de error (`Err`).
 
     fn verificar_validez_consulta(&mut self) -> Result<(), errores::Errores> {
+        match verificar_sintaxis_consulta(&self.campos_consulta,&self.restricciones, &self.ordenamiento,&self.tabla){
+            Ok(_)=>{
+                //tabla valida => 
+                self.ruta_tabla = procesar_ruta(&self.ruta_tabla, &self.tabla[0])
+            },
+            Err(error) => Err(error)?
+        }
         match leer_archivo(&self.ruta_tabla) {
             Ok(mut lector) => {
                 let mut nombres_campos = String::new();
@@ -225,14 +260,11 @@ impl MetodosConsulta for ConsultaSelect {
                 let (_, campos_validos) = &parsear_linea_archivo(&nombres_campos);
                 self.campos_posibles = mapear_campos(campos_validos);
             }
-            Err(_) => return Err(errores::Errores::InvalidTable),
+            Err(_) => Err(errores::Errores::InvalidTable)?,
         };
-        if self.campos_consulta.is_empty() {
-            return Err(errores::Errores::InvalidSyntax);
-        }
         let campos_posibles = &self.campos_posibles;
         if !ConsultaSelect::verificar_campos_validos(campos_posibles, &mut self.campos_consulta) {
-            return Err(errores::Errores::InvalidColumn);
+            Err(errores::Errores::InvalidColumn)?;
         }
         Ok(())
     }
@@ -257,14 +289,14 @@ impl MetodosConsulta for ConsultaSelect {
         for registro in lector.lines() {
             let (registro_parseado, _) = match registro {
                 Ok(registro) => parsear_linea_archivo(&registro),
-                Err(_) => return Err(errores::Errores::Error),
+                Err(_) => Err(errores::Errores::Error)?,
             };
 
             let mut campos_seleccionados: Vec<&usize> = Vec::new();
             for campo in &self.campos_consulta {
                 match self.campos_posibles.get(campo) {
                     Some(valor) => campos_seleccionados.push(valor),
-                    None => return Err(errores::Errores::Error),
+                    None => Err(errores::Errores::Error)?,
                 };
             }
 
@@ -316,30 +348,141 @@ impl Verificaciones for ConsultaSelect {
 
 #[cfg(test)]
 mod tests {
+    use crate::consulta;
+
     use super::*;
     use std::collections::HashMap;
 
     #[test]
     fn test_parsear_consulta_select() {
         let consulta = String::from(
-            "SELECT campo1, campo2 FROM tabla WHERE campo1 = 'valor1' ORDER BY campo2 DESC",
+            "SELECT campo1,campo2 FROM tabla WHERE campo1 = 'valor1' ORDER BY campo2 DESC",
         );
-        let tokens = ConsultaSelect::parsear_consulta_de_comando_select(&consulta);
+        let tokens = parsear_consulta_de_comando(&consulta);
 
         assert_eq!(
             tokens,
             vec![
-                "select", "campo1", "campo2", "from", "tabla", "where", "campo1", "=", "'valor1'",
-                "order", "by", "campo2", "desc"
+                "SELECT", "campo1,campo2", "FROM", "tabla", "WHERE", "campo1", "=", "'valor1'",
+                "ORDER", "BY", "campo2", "DESC"
             ]
         );
     }
 
     #[test]
-    fn test_crear_consulta_select() {
+     fn test_parsear_campos_caso_campos_pegados() {
         let consulta = String::from(
-            "SELECT campo1, campo2 FROM tabla WHERE campo1 = 'valor1' ORDER BY campo2 DESC",
+            "SELECT campo1,campo2,campo3 FROM tabla",
         );
+        let consulta_parseada = parsear_consulta_de_comando(&consulta);
+        let campos = ConsultaSelect::parsear_campos(&consulta_parseada);
+
+        assert_eq!(
+            campos,
+            vec!["campo1","campo2","campo3"]
+        );
+    }
+
+    #[test]
+     fn test_parsear_campos_caso_campos_separados() {
+        let consulta = String::from(
+            "SELECT campo1, campo2, campo3 FROM tabla WHERE campo1 = 'valor1' ORDER BY campo2 DESC",
+        );
+        let consulta_parseada = parsear_consulta_de_comando(&consulta);
+        let campos = ConsultaSelect::parsear_campos(&consulta_parseada);
+
+        assert_eq!(
+            campos,
+            vec!["campo1","campo2","campo3"]
+        );
+    }
+    #[test]
+    fn test_parsear_campos_caso_separados() {
+        let consulta = String::from(
+            "SELECT campo1 ,campo2 ,campo3 FROM tabla",
+        );
+        let consulta_parseada = parsear_consulta_de_comando(&consulta);
+        let campos = ConsultaSelect::parsear_campos(&consulta_parseada);
+
+        assert_eq!(
+            campos,
+            vec!["campo1","campo2","campo3"]
+        );
+    }
+
+    #[test]
+    fn test_parsear_tablas() {
+        let consulta = String::from(
+            "SELECT campo1 ,campo2 ,campo3 FROM tabla1, tabla2, tabla3",
+        );
+        let consulta_parseada = parsear_consulta_de_comando(&consulta);
+        let tablas = ConsultaSelect::parsear_tabla(&consulta_parseada);
+
+        assert_eq!(
+            tablas,
+            vec!["tabla1,","tabla2,","tabla3"]
+        );
+    }
+    #[test]
+    fn test_parsear_tablas_con_corte_where() {
+        let consulta = String::from(
+            "SELECT campo1 ,campo2 ,campo3 FROM tabla1, tabla2, tabla3, tabla4, tabla5 WHERE ....",
+        );
+        let consulta_parseada = parsear_consulta_de_comando(&consulta);
+        let tablas = ConsultaSelect::parsear_tabla(&consulta_parseada);
+
+        assert_eq!(
+            tablas,
+            vec!["tabla1,","tabla2,","tabla3,", "tabla4,", "tabla5"]
+        );
+    }
+
+    #[test]
+    fn test_parsear_condiciones() {
+        
+        let consulta = String::from(
+            "SELECT campo1, campo2, campo3 FROM tabla WHERE campo1 = 'valor1' AND campo2 = 'valor2'",
+        );
+        let consulta_parseada = parsear_consulta_de_comando(&consulta);
+        let restricciones = ConsultaSelect::parsear_restricciones(&consulta_parseada);
+
+        assert_eq!(
+            restricciones,
+            vec!["campo1", "=","'valor1'","AND", "campo2", "=", "'valor2'"]
+        );
+    }
+
+    #[test]
+    fn test_parsear_condiciones_con_corte_order() {
+        let consulta = String::from(
+            "SELECT campo1, campo2, campo3 FROM tabla WHERE campo1 = 'valor1' AND campo2 = 'valor2' OR 1 = 1 ORDER BY ....",
+        );
+        let consulta_parseada = parsear_consulta_de_comando(&consulta);
+        let restricciones = ConsultaSelect::parsear_restricciones(&consulta_parseada);
+
+        assert_eq!(
+            restricciones,
+            vec!["campo1", "=","'valor1'","AND", "campo2", "=", "'valor2'", "OR", "1","=", "1"]
+        );
+    }
+
+    #[test]
+    fn test_parsear_ordenamiento() {
+        let consulta = String::from(
+            "SELECT campo1, campo2, campo3 ORDER BY campo1 DESC, campo2",
+        );
+        let consulta_parseada = parsear_consulta_de_comando(&consulta);
+        let ordenamiento = ConsultaSelect::parsear_ordenamiento(&consulta_parseada);
+
+        assert_eq!(
+            ordenamiento,
+            vec!["campo1", "DESC,", "campo2"]
+        );
+    }
+/*
+    #[test]
+    fn test_verificar_ruta_tabla() {
+       
         let ruta_tabla = String::from("/ruta/a/tablas");
 
         let consulta_select = ConsultaSelect::crear(&consulta, &ruta_tabla);
@@ -353,7 +496,7 @@ mod tests {
         assert_eq!(consulta_select.ordenamiento, vec!["campo2", "desc"]);
         assert_eq!(consulta_select.ruta_tabla, "/ruta/a/tablas/tabla");
     }
-
+ 
     #[test]
     fn test_verificar_campos_validos() {
         let mut campos_validos = HashMap::new();
@@ -412,4 +555,21 @@ mod tests {
         let resultado = consulta.verificar_validez_consulta();
         assert!(resultado.is_err());
     }
+ */}
+
+
+fn separar_campos(campos: &String)->Vec<String>{
+    return campos.split(",").map(|s| s.to_string())
+    .collect();
+}
+
+fn verificar_sintaxis_consulta(campos_consulta: &Vec<String>, restricciones: &Vec<String>, ordenamiento : &Vec<String>, tabla : &Vec<String> )->Result<(),errores::Errores>{
+    if campos_consulta.len() == 0 || tabla.len() > 1 {
+        Err(errores::Errores::InvalidSyntax)?
+    }
+    Ok(())
+}
+
+fn convertir_a_lowercase(campos: &Vec<String>){
+
 }

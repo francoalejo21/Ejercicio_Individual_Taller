@@ -1,18 +1,19 @@
-use crate::errores;
-use crate::insert::ConsultaInsert;
+use crate::{errores, select};
+//use crate::insert::ConsultaInsert;
 use crate::select::ConsultaSelect;
 use std::collections::HashMap;
+use std::future::IntoFuture;
 
 pub trait Parseables {
-    fn parsear_campos(consulta: &Vec<String>, index: &mut usize) -> Vec<String>;
-    fn parsear_tabla(consulta: &Vec<String>, index: &mut usize) -> String;
-    fn parsear_restricciones(_consulta: &Vec<String>, _index: &mut usize) -> Vec<String> {
+    fn parsear_campos(consulta: &Vec<String>) -> Vec<String>;
+    fn parsear_tabla(consulta: &Vec<String>) -> Vec<String>;
+    fn parsear_restricciones(_consulta: &Vec<String>) -> Vec<String> {
         Vec::new()
     }
-    fn parsear_ordenamiento(_consulta: &Vec<String>, _index: &mut usize) -> Vec<String> {
+    fn parsear_ordenamiento(_consulta: &Vec<String>) -> Vec<String> {
         Vec::new()
     }
-    fn parsear_valores(_consulta: &Vec<String>, _index: &mut usize) -> Vec<Vec<String>> {
+    fn parsear_valores(_consulta: &Vec<String>) -> Vec<Vec<String>> {
         Vec::new()
     }
 }
@@ -41,7 +42,7 @@ pub trait MetodosConsulta {
 #[derive(Debug)]
 pub enum SQLConsulta {
     Select(ConsultaSelect),
-    Insert(ConsultaInsert),
+    //Insert(ConsultaInsert),
     //Delete(ConsultaDelete),
     //Update(ConsultaUpdate),
 }
@@ -52,20 +53,24 @@ impl SQLConsulta {
         consulta: &String,
         ruta_tablas: &String,
     ) -> Result<SQLConsulta, errores::Errores> {
-        // Primero eliminamos los espacios al inicio y convertimos la consulta a minúsculas
-        let consulta_limpia = &consulta.trim_start().to_lowercase();
-
+        // Primero eliminamos los espacios y convertimos la consulta a minúsculas
+        let consulta_limpia: Vec<String> = parsear_consulta_de_comando(consulta);
+        if consulta_limpia.len() < 2{
+            Err(errores::Errores::InvalidSyntax)?
+        }
+        let consultas = vec!["select", "insert", "into","delete", "from", "update"];
         // Usamos match para decidir el tipo de consulta
-        match consulta_limpia.as_str() {
-            _ if consulta_limpia.starts_with("select") => Ok(SQLConsulta::Select(
-                ConsultaSelect::crear(consulta_limpia, ruta_tablas),
+        match &consulta_limpia[0].to_ascii_lowercase() {
+            tipo_consulta if tipo_consulta == consultas[0]   => Ok(SQLConsulta::Select(
+                ConsultaSelect::crear(&consulta_limpia, ruta_tablas),
             )),
-            _ if consulta_limpia.starts_with("insert into") => Ok(SQLConsulta::Insert(
-                ConsultaInsert::crear(consulta_limpia, ruta_tablas),
+            /*tipo_consulta if tipo_consulta == consultas[1] => match &consulta_limpia[1].to_ascii_lowercase() {
+                tipo_consulta if tipo_consulta == consultas[2]=> Ok(SQLConsulta::Insert(ConsultaInsert::crear(&consulta_limpia, ruta_tablas),
             )),
-            _ => {
+            _=>Err(errores::Errores::InvalidSyntax)?},*/
+            _=> {
                 // En caso de que no coincida con ninguna consulta soportada, retornamos un error
-                return Err(errores::Errores::InvalidSyntax);
+                Err(errores::Errores::InvalidSyntax)?
             }
         }
     }
@@ -74,20 +79,20 @@ impl SQLConsulta {
         match self.verificar_validez_consulta() {
             Ok(_) => {}
             Err(consulta_no_valida) => {
-                return Err(consulta_no_valida);
+                Err(consulta_no_valida)?;
             }
         }
 
         match self {
             SQLConsulta::Select(consulta_select) => consulta_select.procesar(),
-            SQLConsulta::Insert(consulta_insert) => consulta_insert.procesar(),
+            //SQLConsulta::Insert(consulta_insert) => consulta_insert.procesar(),
         }
     }
 
     fn verificar_validez_consulta(&mut self) -> Result<(), errores::Errores> {
         match self {
             SQLConsulta::Select(consulta_select) => consulta_select.verificar_validez_consulta(),
-            SQLConsulta::Insert(consulta_insert) => consulta_insert.verificar_validez_consulta(),
+            //SQLConsulta::Insert(consulta_insert) => consulta_insert.verificar_validez_consulta(),
         }
     }
 }
@@ -122,6 +127,14 @@ pub fn obtener_campos_consulta_orden_por_defecto(campos: &HashMap<String, usize>
         campos_tabla.push(key.to_string());
     }
     campos_tabla
+}
+
+pub fn parsear_consulta_de_comando(consulta: &String) -> Vec<String> {
+    return consulta
+        .split_whitespace()
+        .map(|s| s.to_string())
+        .collect();
+    
 }
 
 #[cfg(test)]
@@ -176,7 +189,7 @@ mod tests {
 
         assert!(resultado.is_ok());
         match resultado.unwrap() {
-            SQLConsulta::Insert(_) => assert!(true),
+            //SQLConsulta::Insert(_) => assert!(true),
             _ => assert!(false, "Se esperaba una consulta de tipo INSERT"),
         }
     }

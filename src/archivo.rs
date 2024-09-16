@@ -50,6 +50,7 @@ pub fn parsear_linea_archivo(linea: &String) -> (Vec<String>, Vec<String>) {
     return (
         linea.split(",").map(|s| s.to_string()).collect(),
         linea
+            .trim()
             .to_lowercase()
             .split(",")
             .map(|s| s.to_string())
