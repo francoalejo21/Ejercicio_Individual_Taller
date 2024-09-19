@@ -15,7 +15,7 @@ pub fn procesar_ruta(ruta: &str, tabla: &str) -> String {
     let mut ruta_modificada = String::new(); // Crear un nuevo String
     ruta_modificada.push_str(ruta); // Agregar la ruta original (sin clonar)
     ruta_modificada.push_str("/"); // Modificar
-    ruta_modificada.push_str(&tabla.to_ascii_lowercase()); // Modificar
+    ruta_modificada.push_str(&tabla); // Modificar
     return ruta_modificada;
 }
 

@@ -1,21 +1,13 @@
 use crate::{errores, select};
 //use crate::insert::ConsultaInsert;
 use crate::select::ConsultaSelect;
-use std::collections::HashMap;
-use std::future::IntoFuture;
+use std::collections::{HashMap, HashSet};
+use std::vec;
 
 pub trait Parseables {
-    fn parsear_campos(consulta: &Vec<String>) -> Vec<String>;
-    fn parsear_tabla(consulta: &Vec<String>) -> Vec<String>;
-    fn parsear_restricciones(_consulta: &Vec<String>) -> Vec<String> {
-        Vec::new()
-    }
-    fn parsear_ordenamiento(_consulta: &Vec<String>) -> Vec<String> {
-        Vec::new()
-    }
-    fn parsear_valores(_consulta: &Vec<String>) -> Vec<Vec<String>> {
-        Vec::new()
-    }
+    fn parsear_cualquier_cosa(consulta: &Vec<String>, keywords_inicio: Vec<String> , keyword_final :HashSet<String>, 
+    caracteres_delimitadores : Vec<char>, parseo_lower : bool)-> Result<Vec<String>, errores::Errores>;
+
 }
 
 // Trait para definir metodos comunes de las consultas posibles
@@ -53,17 +45,19 @@ impl SQLConsulta {
         consulta: &String,
         ruta_tablas: &String,
     ) -> Result<SQLConsulta, errores::Errores> {
-        // Primero eliminamos los espacios y convertimos la consulta a minúsculas
+        // Primero eliminamos los espacios
         let consulta_limpia: Vec<String> = parsear_consulta_de_comando(consulta);
         if consulta_limpia.len() < 2{
             Err(errores::Errores::InvalidSyntax)?
         }
         let consultas = vec!["select", "insert", "into","delete", "from", "update"];
         // Usamos match para decidir el tipo de consulta
-        match &consulta_limpia[0].to_ascii_lowercase() {
-            tipo_consulta if tipo_consulta == consultas[0]   => Ok(SQLConsulta::Select(
-                ConsultaSelect::crear(&consulta_limpia, ruta_tablas),
-            )),
+        match &consulta_limpia[0].to_lowercase() {
+            tipo_consulta if tipo_consulta == consultas[0]   => {
+                Ok(SQLConsulta::Select(
+                ConsultaSelect::crear(&consulta_limpia, ruta_tablas)?
+                
+            ))},
             /*tipo_consulta if tipo_consulta == consultas[1] => match &consulta_limpia[1].to_ascii_lowercase() {
                 tipo_consulta if tipo_consulta == consultas[2]=> Ok(SQLConsulta::Insert(ConsultaInsert::crear(&consulta_limpia, ruta_tablas),
             )),
@@ -133,8 +127,7 @@ pub fn parsear_consulta_de_comando(consulta: &String) -> Vec<String> {
     return consulta
         .split_whitespace()
         .map(|s| s.to_string())
-        .collect();
-    
+        .collect();    
 }
 
 #[cfg(test)]

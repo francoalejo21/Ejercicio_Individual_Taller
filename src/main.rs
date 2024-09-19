@@ -1,3 +1,8 @@
+mod verificaciones_sintaxis;
+mod parseos;
+mod ordenamiento;
+mod abe;
+mod validador_where;
 mod archivo;
 mod consulta;
 mod delete;
@@ -41,8 +46,8 @@ fn ejecutar() -> Result<(), errores::Errores> {
     let consulta_sin_parsear = &args[2];
 
     let mut consulta = consulta::SQLConsulta::crear_consulta(consulta_sin_parsear, ruta_tablas)
-        .map_err(|_| errores::Errores::Error)?;
-
+        .map_err(|_| errores::Errores::InvalidSyntax)?;
+    println!("ya cree la consulta");
     consulta.procesar_consulta()?;
     Ok(())
 }
