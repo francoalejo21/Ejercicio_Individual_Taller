@@ -1,0 +1,30 @@
+Select{
+	campos_consulta
+	tabla
+	campos_posibles
+	condiciones
+	operandos_condiciones
+	ordenamiento
+	campos_ordenamiento
+	ruta_tabla
+}
+
+Delete{ (similar a select) (elimina una fila de csv)
+	ruta_tabla
+	table_name
+	condiciones (si no estan las condiciones borra todo)	
+}
+
+Update{ (modifica una fila de csv o si no hay condiciones reescribe el archivo csv)
+	ruta_tabla
+	table_name
+	vector_columnas_valor
+	condiciones (si no hay where reescribimos el archivo completo)
+}
+
+insert{ (se pueden insertar filas donde algunos campos sean vacios, se debe poder insertar en cualquier orden)
+	ruta_tabla
+	table_name
+	vector nombre_columnas
+	valores 
+}

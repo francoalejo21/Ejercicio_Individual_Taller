@@ -64,15 +64,15 @@ impl ConsultaSelect {
         let palabras_reservadas = vec!["select", "from", "where", "order", "by"];        
         verificar_orden_keywords(consulta, palabras_reservadas)?;
         let mut caracteres_delimitadores: Vec<char> = vec![','];
-        let campos_consulta = Self::parsear_cualquier_cosa(consulta, vec![String::from("select")], HashSet::from(["from".to_string()]), caracteres_delimitadores, true)?;
+        let campos_consulta = Self::parsear_cualquier_cosa(consulta, vec![String::from("select")], HashSet::from(["from".to_string()]), caracteres_delimitadores, true, false)?;
         let campos_posibles: HashMap<String, usize> = HashMap::new();
         let ruta_tabla = ruta_a_tablas.to_string(); 
         caracteres_delimitadores = vec![]; //no hay delimitadores
-        let tabla: Vec<String> = Self::parsear_cualquier_cosa(consulta, vec![String::from("from")], HashSet::from(["where".to_string(),"order".to_string(), "".to_string()]), caracteres_delimitadores, false)?;
+        let tabla: Vec<String> = Self::parsear_cualquier_cosa(consulta, vec![String::from("from")], HashSet::from(["where".to_string(),"order".to_string(), "".to_string()]), caracteres_delimitadores, false, false)?;
         caracteres_delimitadores = vec!['=','<','>','(',')'];
-        let restricciones: Vec<String> = Self::parsear_cualquier_cosa(consulta, vec![String::from("where")], HashSet::from(["order".to_string(), "".to_string()]), caracteres_delimitadores, false)?;
+        let restricciones: Vec<String> = Self::parsear_cualquier_cosa(consulta, vec![String::from("where")], HashSet::from(["order".to_string(), "".to_string()]), caracteres_delimitadores, false, true)?;
         caracteres_delimitadores = vec![','];
-        let ordenamiento: Vec<String> = Self::parsear_cualquier_cosa(consulta, vec![String::from("order"),String::from("by")], HashSet::from(["".to_string()]), caracteres_delimitadores, true)?;
+        let ordenamiento: Vec<String> = Self::parsear_cualquier_cosa(consulta, vec![String::from("order"),String::from("by")], HashSet::from(["".to_string()]), caracteres_delimitadores, true, true)?;
         Ok(ConsultaSelect {
             campos_consulta,
             tabla,
@@ -85,58 +85,6 @@ impl ConsultaSelect {
 }
 
 impl Parseables for ConsultaSelect {
-
-    fn parsear_cualquier_cosa(
-        consulta: &Vec<String>, 
-        keywords_inicio: Vec<String>, 
-        keyword_final: HashSet<String>, 
-        caracteres_delimitadores: Vec<char>, 
-        parseo_lower: bool,
-    ) -> Result<Vec<String>, errores::Errores> {
-        let mut index = 0;
-        let mut campos = Vec::new();
-        let mut keyword_final_encontrada = false;
-    
-        // Busco el/las keywords de inicio y las salteo
-        let mut i_keywords_inicio = 0;
-        while index < consulta.len() && i_keywords_inicio < keywords_inicio.len() {
-            if consulta[index].to_lowercase() == keywords_inicio[i_keywords_inicio] {
-                i_keywords_inicio += 1;
-            }
-            index += 1;
-        }
-    
-        // Si no encontre ninguna keyword de inicio devuelvo vacio
-        if i_keywords_inicio == 0 {
-            return Ok(campos);
-        }
-    
-        // Si no encontre todas las keywords de inicio devuelvo error
-        if i_keywords_inicio != keywords_inicio.len() {
-            return Err(errores::Errores::InvalidSyntax);
-        }
-    
-        while index < consulta.len() {
-            let token = consulta[index].to_lowercase();
-            if keyword_final.contains(&token) {
-                keyword_final_encontrada = true;
-                break;
-            }
-            campos.push(if parseo_lower { token } else { consulta[index].to_string()});
-            index += 1;
-        }
-    
-        if campos.is_empty() {
-            return Err(errores::Errores::InvalidSyntax);
-        }
-    
-        let campos_parseados = parseo(&campos, &caracteres_delimitadores);
-        if keyword_final.contains("") || keyword_final_encontrada {
-            Ok(campos_parseados)
-        } else {
-            Err(errores::Errores::InvalidSyntax)
-        }
-    }
 }
 impl MetodosConsulta for ConsultaSelect {
     /// Verifica la validez de la consulta SQL.
@@ -162,7 +110,7 @@ impl MetodosConsulta for ConsultaSelect {
         if !ConsultaSelect::verificar_campos_validos(&self.campos_posibles, &mut self.campos_consulta) {
             return Err(errores::Errores::InvalidColumn);
         }
-        self.restricciones = convertir_lower_case(&self.restricciones, &self.campos_posibles);
+        self.restricciones = convertir_lower_case_restricciones(&self.restricciones, &self.campos_posibles);
         let mut validador_where = ValidadorSintaxis::new(&self.restricciones);
         if self.restricciones.len() != 0 {
             if !validador_where.validar(){
@@ -269,7 +217,7 @@ impl Verificaciones for ConsultaSelect {
     }
 }
 
-fn verificar_sintaxis_campos(campos: &Vec<String>)->Result<(),errores::Errores>{
+pub fn verificar_sintaxis_campos(campos: &Vec<String>)->Result<(),errores::Errores>{
     // iteramos el vector de campos si en la primera posicion hay una coma o en la ultima devolver error, o si hay dos comas seguidas
     // entre campos devolver error tambien
     let mut index: usize = 0;
@@ -287,7 +235,7 @@ fn verificar_sintaxis_campos(campos: &Vec<String>)->Result<(),errores::Errores>{
     Ok(())
 }
 
-fn eliminar_comas(campos : &Vec<String>)-> Vec<String>{
+pub fn eliminar_comas(campos : &Vec<String>)-> Vec<String>{
     //iterar sobre el vector de campos y eliminar las comas
     let mut campos_limpio: Vec<String> = Vec::new();
     for campo in campos{
@@ -388,7 +336,7 @@ fn obtener_ordenamientos(ordenamientos: &Vec<String>) -> Vec<(String, bool)> {
 
 
 
-fn convertir_lower_case(restricciones: &Vec<String>, campos_mapeados: &HashMap<String,usize>)->Vec<String>{
+pub fn convertir_lower_case_restricciones(restricciones: &Vec<String>, campos_mapeados: &HashMap<String,usize>)->Vec<String>{
     //iteramos sobre las restricciones y si el campo es un campo de la tabla lo convertimos a minusculas y si es un operador and or not
     // tambien casteamos estos a lower case
     println!("campos mapeados : {:?}",campos_mapeados);

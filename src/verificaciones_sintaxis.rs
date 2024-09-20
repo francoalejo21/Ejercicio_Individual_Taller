@@ -35,21 +35,3 @@ pub fn verificar_orden_keywords(query: &Vec<String>, palabras_clave_consulta : V
     }
     Ok(found_keywords)
 }
-/* 
-fn main() {
-    let query = "SELECT campo1, campo2 FROM tabla WHERE campo1 = 1 ORDER BY campo2";
-    
-    match verificar_orden_keywords(query) {
-        Ok(_) => println!("Consulta SQL válida."),
-        Err(e) => println!("{}", e),
-    }
-}
-}
-
-fn main() {
-    let query = "SELECT campo1, campo2 FROM tabla WHERE campo1 = 1 ORDER BY campo2";
-    match verificar_orden_keywords(query) {
-        Ok(_) => println!("Consulta SQL válida."),
-        Err(e) => println!("{}", e),
-    }
-}*/

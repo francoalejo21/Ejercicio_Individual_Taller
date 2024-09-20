@@ -12,7 +12,7 @@ pub fn parseo(condiciones: &Vec<String>, caracteres: &Vec<char>) -> Vec<String> 
         // Recorrer cada carácter en la condición
         for c in condicion.chars() {
             // Si encontramos un operador o paréntesis
-            if caracteres.contains(&c) {
+            if caracteres.contains(&c) || c == '(' || c == ')' {
                 // Añadimos el token acumulado (si no está vacío) antes del operador
                 if !token.is_empty() {
                     tokens.push(token.clone());

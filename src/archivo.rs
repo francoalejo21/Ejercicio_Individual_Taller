@@ -48,7 +48,7 @@ pub fn leer_archivo(ruta_archivo: &str) -> Result<BufReader<File>, io::Error> {
 
 pub fn parsear_linea_archivo(linea: &String) -> (Vec<String>, Vec<String>) {
     return (
-        linea.split(",").map(|s| s.to_string()).collect(),
+        linea.trim().split(",").map(|s| s.to_string()).collect(),
         linea
             .trim()
             .to_lowercase()

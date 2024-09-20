@@ -23,7 +23,7 @@ impl NodoArbolExpresiones {
         }
     }
 }
-
+#[derive(Debug, Clone)]
 pub struct ArbolExpresiones {
     raiz: Option<Box<NodoArbolExpresiones>>,
 }

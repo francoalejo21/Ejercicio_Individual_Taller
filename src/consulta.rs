@@ -1,13 +1,79 @@
-use crate::{errores, select};
-//use crate::insert::ConsultaInsert;
+use crate::{errores, select, parseos::parseo};
+use crate::insert::ConsultaInsert;
 use crate::select::ConsultaSelect;
 use std::collections::{HashMap, HashSet};
+use crate::update::ConsultaUpdate;
+use crate::delete::ConsultaDelete;
+
 use std::vec;
 
 pub trait Parseables {
-    fn parsear_cualquier_cosa(consulta: &Vec<String>, keywords_inicio: Vec<String> , keyword_final :HashSet<String>, 
-    caracteres_delimitadores : Vec<char>, parseo_lower : bool)-> Result<Vec<String>, errores::Errores>;
+    fn parsear_cualquier_cosa(
+        consulta: &Vec<String>, 
+        keywords_inicio: Vec<String>, 
+        keyword_final: HashSet<String>, 
+        caracteres_delimitadores: Vec<char>, 
+        parseo_lower: bool,
+        opcional: bool, // Nuevo parámetro para indicar si las palabras clave de inicio son opcionales
+    ) -> Result<Vec<String>, errores::Errores> {
+        let mut campos = Vec::new();
+        let mut keyword_final_encontrada = false;
+    
+        let index = buscar_keywords_inicio_seguidas(consulta, &keywords_inicio, opcional)?;
+        if index == 0 && opcional {
+            return Ok(campos); // Si no se encuentran las palabras clave de inicio opcionales, devolver campos vacío
+        }
+    
+        let mut index = index;
+        while index < consulta.len() {
+            let token = consulta[index].to_lowercase();
+            if keyword_final.contains(&token) {
+                keyword_final_encontrada = true;
+                break;
+            }
+            campos.push(if parseo_lower { token } else { consulta[index].to_string() });
+            index += 1;
+        }
+    
+        if campos.is_empty() {
+            return Err(errores::Errores::InvalidSyntax);
+        }
+    
+        let campos_parseados = parseo(&campos, &caracteres_delimitadores);
+        if keyword_final.contains("") || keyword_final_encontrada {
+            Ok(campos_parseados)
+        } else {
+            Err(errores::Errores::InvalidSyntax)
+        }
+    }
+}
 
+fn buscar_keywords_inicio_seguidas(
+    consulta: &Vec<String>, 
+    keywords_inicio: &Vec<String>,
+    opcional: bool // Nuevo parámetro para indicar si las palabras clave de inicio son opcionales
+) -> Result<usize, errores::Errores> {
+    let mut index = 0;
+    let mut keyword_index = 0;
+
+    while index < consulta.len() {
+        if consulta[index].to_lowercase() == keywords_inicio[keyword_index].to_lowercase() {
+            keyword_index += 1;
+            if keyword_index == keywords_inicio.len() {
+                return Ok(index + 1); // Se encontraron todas las palabras clave seguidas
+            }
+        } else if keyword_index > 0 {
+            // Si se encontró solo una de las palabras clave, devolver error de sintaxis
+            return Err(errores::Errores::InvalidSyntax);
+        }
+        index += 1;
+    }
+
+    if opcional && keyword_index == 0 {
+        Ok(0) // Si las palabras clave de inicio son opcionales y no se encuentran, devolver 0
+    } else {
+        Err(errores::Errores::InvalidSyntax)
+    }
 }
 
 // Trait para definir metodos comunes de las consultas posibles
@@ -34,9 +100,9 @@ pub trait MetodosConsulta {
 #[derive(Debug)]
 pub enum SQLConsulta {
     Select(ConsultaSelect),
-    //Insert(ConsultaInsert),
-    //Delete(ConsultaDelete),
-    //Update(ConsultaUpdate),
+    Insert(ConsultaInsert),
+    Delete(ConsultaDelete),
+    Update(ConsultaUpdate),
 }
 
 impl SQLConsulta {
@@ -55,13 +121,16 @@ impl SQLConsulta {
         match &consulta_limpia[0].to_lowercase() {
             tipo_consulta if tipo_consulta == consultas[0]   => {
                 Ok(SQLConsulta::Select(
-                ConsultaSelect::crear(&consulta_limpia, ruta_tablas)?
-                
-            ))},
-            /*tipo_consulta if tipo_consulta == consultas[1] => match &consulta_limpia[1].to_ascii_lowercase() {
-                tipo_consulta if tipo_consulta == consultas[2]=> Ok(SQLConsulta::Insert(ConsultaInsert::crear(&consulta_limpia, ruta_tablas),
-            )),
-            _=>Err(errores::Errores::InvalidSyntax)?},*/
+                ConsultaSelect::crear(&consulta_limpia, ruta_tablas)?,
+                ))},                
+            tipo_consulta if tipo_consulta == consultas[1] => match &consulta_limpia[1].to_lowercase(){
+                tipo_consulta if tipo_consulta == consultas[2] => 
+                Ok(SQLConsulta::Insert(ConsultaInsert::crear(&consulta_limpia, ruta_tablas)?)),
+                _ => Err(errores::Errores::InvalidSyntax)?},
+            tipo_consulta if tipo_consulta == consultas[5] =>{
+                Ok(SQLConsulta::Update(ConsultaUpdate::crear(&consulta_limpia, ruta_tablas)?))},
+            tipo_consulta if tipo_consulta == consultas[3] =>{
+                Ok(SQLConsulta::Delete(ConsultaDelete::crear(&consulta_limpia, ruta_tablas)?))},
             _=> {
                 // En caso de que no coincida con ninguna consulta soportada, retornamos un error
                 Err(errores::Errores::InvalidSyntax)?
@@ -79,14 +148,18 @@ impl SQLConsulta {
 
         match self {
             SQLConsulta::Select(consulta_select) => consulta_select.procesar(),
-            //SQLConsulta::Insert(consulta_insert) => consulta_insert.procesar(),
-        }
+            SQLConsulta::Insert(consulta_insert) => consulta_insert.procesar(),
+            SQLConsulta::Update(consulta_update) => consulta_update.procesar(),
+            SQLConsulta::Delete(consulta_delete) => consulta_delete.procesar(),
+        }        
     }
 
     fn verificar_validez_consulta(&mut self) -> Result<(), errores::Errores> {
         match self {
             SQLConsulta::Select(consulta_select) => consulta_select.verificar_validez_consulta(),
-            //SQLConsulta::Insert(consulta_insert) => consulta_insert.verificar_validez_consulta(),
+            SQLConsulta::Insert(consulta_insert) => consulta_insert.verificar_validez_consulta(),
+            SQLConsulta::Update(consulta_update) => consulta_update.verificar_validez_consulta(),
+            SQLConsulta::Delete(consulta_delete) => consulta_delete.verificar_validez_consulta(),
         }
     }
 }
