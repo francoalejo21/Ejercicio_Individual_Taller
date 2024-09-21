@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::errores;
 
-pub fn verificar_orden_keywords(query: &Vec<String>, palabras_clave_consulta : Vec<&str>) -> Result<HashSet<String>,errores::Errores> {
+pub fn verificar_orden_keywords(query: &[String], palabras_clave_consulta : Vec<&str>) -> Result<HashSet<String>,errores::Errores> {
     // Define las palabras clave esperadas en el orden correcto
     //let keywords_order = vec!["select", "from", "where", "order", "by"];
     

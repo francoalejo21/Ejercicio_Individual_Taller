@@ -1,10 +1,5 @@
-pub struct ordenamiento{
-    
-}
-
-
 pub fn ordenar_consultas_multiples(
-    filas: &mut Vec<Vec<String>>, 
+    filas: &mut [Vec<String>], 
     columnas_orden: Vec<(usize, bool)>
 ) {
     filas.sort_by(|a, b| {

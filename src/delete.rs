@@ -1,17 +1,16 @@
 use crate::archivo::{leer_archivo, parsear_linea_archivo, procesar_ruta};
-use crate::consulta::{mapear_campos, obtener_campos_consulta_orden_por_defecto, MetodosConsulta, Parseables, Verificaciones};
+use crate::consulta::{mapear_campos, MetodosConsulta, Parseables, Verificaciones};
 use crate::validador_where::ValidadorSintaxis;
 use crate::verificaciones_sintaxis::verificar_orden_keywords;
 use std::collections::HashSet;
-use crate::select::{convertir_lower_case_restricciones, eliminar_comas};
-use crate::select::ConsultaSelect;
+use crate::select::convertir_lower_case_restricciones;
 use crate::validador_where::ValidadorOperandosValidos;
 use std::fs;
 use std::io::BufReader;
 use crate::abe::ArbolExpresiones;
 use crate::errores;
 use crate::parseos::parseo;
-use std::fs::{OpenOptions, File};
+use std::fs::File;
 use std::path::Path;
 use std::{
     collections::HashMap,
@@ -72,7 +71,7 @@ impl ConsultaDelete {
         println!("{:?}" ,consulta_spliteada);
         let condiciones: Vec<String> = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from("where")], HashSet::from(["".to_string()]), caracteres_delimitadores, false, true)?;
         println!("condiciones {:?}", condiciones);
-        println!("Pude crea consulta update");
+        println!("Pude crea consulta delete");
         Ok(ConsultaDelete {
             campos_posibles,
             tabla,
@@ -109,7 +108,7 @@ impl MetodosConsulta for ConsultaDelete {
         //verificamos que la condicion where sea valida y los operandos sean validos
         self.condiciones = convertir_lower_case_restricciones(&self.condiciones, &self.campos_posibles);
         let mut validador_where = ValidadorSintaxis::new(&self.condiciones);
-        if self.condiciones.len() != 0 {
+        if !self.condiciones.is_empty(){
             if !validador_where.validar(){
                 return Err(errores::Errores::InvalidSyntax);
             }
@@ -198,7 +197,7 @@ impl Verificaciones for ConsultaDelete {
                 return false;
             }
         }
-        return true;
+        true
     }
 }
 fn unir_literales_spliteados(consulta_spliteada: &Vec<String>) -> Vec<String> {

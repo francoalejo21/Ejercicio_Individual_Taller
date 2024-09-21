@@ -1,4 +1,4 @@
-pub fn parseo(condiciones: &Vec<String>, caracteres: &Vec<char>) -> Vec<String> {
+pub fn parseo(condiciones: &Vec<String>, caracteres: &[char]) -> Vec<String> {
     // Operadores que no deben estar separados de los operandos
     //let operadores_que_no_tienen_que_estar_separados_operando: Vec<char> = vec!['=', '>', '<', '(', ')'];
 

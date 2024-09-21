@@ -14,9 +14,9 @@ use std::io::{self, BufReader};
 pub fn procesar_ruta(ruta: &str, tabla: &str) -> String {
     let mut ruta_modificada = String::new(); // Crear un nuevo String
     ruta_modificada.push_str(ruta); // Agregar la ruta original (sin clonar)
-    ruta_modificada.push_str("/"); // Modificar
-    ruta_modificada.push_str(&tabla); // Modificar
-    return ruta_modificada;
+    ruta_modificada.push('/'); // Modificar
+    ruta_modificada.push_str(tabla); // Modificar
+    ruta_modificada
 }
 
 /// Lee el archivo en la ruta especificada y devuelve un `BufReader` para procesarlo.
@@ -46,7 +46,7 @@ pub fn leer_archivo(ruta_archivo: &str) -> Result<BufReader<File>, io::Error> {
 /// # Retorno
 /// Devuelve una tupla con dos vectores `Vec<String>`: el primero con los campos originales y el segundo con los campos en minúsculas.
 
-pub fn parsear_linea_archivo(linea: &String) -> (Vec<String>, Vec<String>) {
+pub fn parsear_linea_archivo(linea: &str) -> (Vec<String>, Vec<String>) {
     return (
         linea.trim().split(",").map(|s| s.to_string()).collect(),
         linea

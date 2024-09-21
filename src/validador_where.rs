@@ -1,11 +1,10 @@
-use std::{collections::{HashMap, HashSet}, error::Error};
+use std::collections::{HashMap, HashSet};
 
 use crate::errores;
 
 pub struct ValidadorSintaxis {
     tokens: Vec<String>,
     operadores_binarios: HashSet<String>,
-    operadores_unarios: HashSet<String>,
     parentesis_abiertos: i32,
     operandos: Vec<String>,
 }
@@ -16,7 +15,6 @@ impl ValidadorSintaxis {
             .into_iter()
             .map(String::from)
             .collect();
-        let operadores_unarios = vec!["not"].into_iter().map(String::from).collect();
         let mut tokens= Vec::new();
         for token in _tokens {
             tokens.push(token.to_string());
@@ -24,7 +22,6 @@ impl ValidadorSintaxis {
         ValidadorSintaxis {
             tokens,
             operadores_binarios,
-            operadores_unarios,
             parentesis_abiertos: 0,
             operandos: Vec::new(),
         }
@@ -97,7 +94,7 @@ impl ValidadorOperandosValidos {
             operandos.push(operando.to_string());
         }   
         let mut campos_tabla: HashSet<String> = HashSet::new();
-        for (key, _) in _campos_tabla {
+        for key in _campos_tabla.keys() {
             campos_tabla.insert(key.to_string());
         }
 

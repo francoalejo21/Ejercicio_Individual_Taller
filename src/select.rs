@@ -7,7 +7,6 @@ use crate::consulta::{
 use crate::abe::ArbolExpresiones;
 use crate::validador_where::ValidadorOperandosValidos;
 use crate::ordenamiento;
-use crate::parseos::parseo;
 use crate::verificaciones_sintaxis::verificar_orden_keywords;
 use crate::{errores, validador_where::ValidadorSintaxis};
 use archivo::parsear_linea_archivo;
@@ -60,7 +59,7 @@ impl ConsultaSelect {
     /// Retorna una instancia de `ConsultaSelect` con los campos, tabla, restricciones y
     /// ordenamiento extraídos.
 
-    pub fn crear(consulta: &Vec<String>, ruta_a_tablas: &String) -> Result<ConsultaSelect,errores::Errores> {
+    pub fn crear(consulta: &[String], ruta_a_tablas: &String) -> Result<ConsultaSelect,errores::Errores> {
         let palabras_reservadas = vec!["select", "from", "where", "order", "by"];        
         verificar_orden_keywords(consulta, palabras_reservadas)?;
         let mut caracteres_delimitadores: Vec<char> = vec![','];
@@ -112,7 +111,7 @@ impl MetodosConsulta for ConsultaSelect {
         }
         self.restricciones = convertir_lower_case_restricciones(&self.restricciones, &self.campos_posibles);
         let mut validador_where = ValidadorSintaxis::new(&self.restricciones);
-        if self.restricciones.len() != 0 {
+        if !self.restricciones.is_empty(){
             if !validador_where.validar(){
                 return Err(errores::Errores::InvalidSyntax);
             }
@@ -120,7 +119,7 @@ impl MetodosConsulta for ConsultaSelect {
             let validador_operandos_validos = ValidadorOperandosValidos::new(&operandos, &self.campos_posibles);
             validador_operandos_validos.validar()?;
         }
-        if self.ordenamiento.len() != 0 {
+        if !self.ordenamiento.is_empty(){
             verificar_sintaxis_ordenamiento(&self.ordenamiento)?;
             if !verificar_campos_validos_ordenamientos(&self.ordenamiento, &self.campos_posibles) {
                 Err(errores::Errores::InvalidColumn)?
@@ -148,15 +147,13 @@ impl MetodosConsulta for ConsultaSelect {
         let mut vector_almacenar: Vec<Vec<String>> = Vec::new();
 
         for registro in lector.lines() {
-            let (registro_parseado, _) = registro.map_err(|_| errores::Errores::Error).and_then(|r| Ok(parsear_linea_archivo(&r)))?;
+            let (registro_parseado, _) = registro.map_err(|_| errores::Errores::Error).map(|r| parsear_linea_archivo(&r))?;
             let campos_seleccionados: Vec<&usize> = self.campos_consulta.iter()
                 .map(|campo| self.campos_posibles.get(campo).ok_or(errores::Errores::Error))
                 .collect::<Result<_, _>>()?;
 
-            if !arbol_exp.arbol_vacio() {
-                if !arbol_exp.evalua(&self.campos_posibles, &registro_parseado) {
-                    continue;
-                }
+            if !arbol_exp.arbol_vacio() && !arbol_exp.evalua(&self.campos_posibles, &registro_parseado) {
+                continue;
             }
 
             let linea: Vec<String> = campos_seleccionados.iter()
@@ -196,16 +193,14 @@ impl Verificaciones for ConsultaSelect {
         campos_validos: &HashMap<String, usize>,
         campos_consulta: &mut Vec<String>,
     ) -> bool {
-        if campos_consulta.len() == 1 {
-            if campos_consulta[0] == "*".to_string() {
-                campos_consulta.pop(); //Me saco de encima el "*""
-                                       //debo reemplazar ese caracter por todos los campos válidos
-                let campos = &obtener_campos_consulta_orden_por_defecto(campos_validos);
-                for campo in campos {
-                    campos_consulta.push(campo.to_string());
-                }
-                return true;
+        if campos_consulta.len() == 1 && campos_consulta[0] == "*"{
+            campos_consulta.pop(); //Me saco de encima el "*""
+                                    //debo reemplazar ese caracter por todos los campos válidos
+            let campos = &obtener_campos_consulta_orden_por_defecto(campos_validos);
+            for campo in campos {
+                campos_consulta.push(campo.to_string());
             }
+            return true;
         }
 
         for campo in campos_consulta {
@@ -213,11 +208,11 @@ impl Verificaciones for ConsultaSelect {
                 return false;
             }
         }
-        return true;
+        true
     }
 }
 
-pub fn verificar_sintaxis_campos(campos: &Vec<String>)->Result<(),errores::Errores>{
+pub fn verificar_sintaxis_campos(campos: &[String])->Result<(),errores::Errores>{
     // iteramos el vector de campos si en la primera posicion hay una coma o en la ultima devolver error, o si hay dos comas seguidas
     // entre campos devolver error tambien
     let mut index: usize = 0;
@@ -246,7 +241,7 @@ pub fn eliminar_comas(campos : &Vec<String>)-> Vec<String>{
     campos_limpio
 }
 
-fn verificar_sintaxis_ordenamiento(ordenamiento: &Vec<String>) -> Result<(), errores::Errores> {
+fn verificar_sintaxis_ordenamiento(ordenamiento: &[String]) -> Result<(), errores::Errores> {
     if ordenamiento.is_empty() {
         return Ok(()); // No hay ordenamiento, no hay errores
     }
@@ -296,7 +291,7 @@ fn verificar_campos_validos_ordenamientos(ordenamiento : &Vec<String>, campos_ma
             return false;
         }
     }
-    return true;
+    true
 }
 
 fn obtener_ordenamientos(ordenamientos: &Vec<String>) -> Vec<(String, bool)> {
@@ -336,27 +331,25 @@ fn obtener_ordenamientos(ordenamientos: &Vec<String>) -> Vec<(String, bool)> {
 
 
 
-pub fn convertir_lower_case_restricciones(restricciones: &Vec<String>, campos_mapeados: &HashMap<String,usize>)->Vec<String>{
-    //iteramos sobre las restricciones y si el campo es un campo de la tabla lo convertimos a minusculas y si es un operador and or not
-    // tambien casteamos estos a lower case
-    println!("campos mapeados : {:?}",campos_mapeados);
+pub fn convertir_lower_case_restricciones(restricciones: &Vec<String>, campos_mapeados: &HashMap<String, usize>) -> Vec<String> {
+    // Iteramos sobre las restricciones y si el campo es un campo de la tabla lo convertimos a minúsculas y si es un operador and, or, not
+    // también casteamos estos a lower case
+    println!("campos mapeados : {:?}", campos_mapeados);
     let mut restricciones_lower: Vec<String> = Vec::new();
-    for restriccion in restricciones{
-        if campos_mapeados.contains_key(&restriccion.to_lowercase()) && !es_literal(restriccion) && !restriccion.chars().all(char::is_numeric){
-            restricciones_lower.push(restriccion.to_lowercase());
-        }else{
-            if restriccion.to_lowercase() == "and" || restriccion.to_lowercase() == "or" || restriccion.to_lowercase() == "not"{
-                restricciones_lower.push(restriccion.to_lowercase());
-            }
-            else {
-                restricciones_lower.push(restriccion.to_string());
-            }
+    for restriccion in restricciones {
+        let restriccion_lower = restriccion.to_lowercase();
+        if campos_mapeados.contains_key(&restriccion_lower) && !es_literal(restriccion) && !restriccion.chars().all(char::is_numeric) {
+            restricciones_lower.push(restriccion_lower);
+        } else if ["and", "or", "not"].contains(&restriccion_lower.as_str()) {
+            restricciones_lower.push(restriccion_lower);
+        } else {
+            restricciones_lower.push(restriccion.to_string());
         }
-    }  
+    }
     restricciones_lower
 }
 
-fn es_literal(operando: &String) -> bool {
+fn es_literal(operando: &str) -> bool {
     operando.starts_with("'") && operando.ends_with("'")
 }
 

@@ -1,15 +1,13 @@
-use crate::{errores, select, parseos::parseo};
+use crate::{errores, parseos::parseo};
 use crate::insert::ConsultaInsert;
 use crate::select::ConsultaSelect;
 use std::collections::{HashMap, HashSet};
 use crate::update::ConsultaUpdate;
 use crate::delete::ConsultaDelete;
 
-use std::vec;
-
 pub trait Parseables {
     fn parsear_cualquier_cosa(
-        consulta: &Vec<String>, 
+        consulta: &[String], 
         keywords_inicio: Vec<String>, 
         keyword_final: HashSet<String>, 
         caracteres_delimitadores: Vec<char>, 
@@ -49,8 +47,8 @@ pub trait Parseables {
 }
 
 fn buscar_keywords_inicio_seguidas(
-    consulta: &Vec<String>, 
-    keywords_inicio: &Vec<String>,
+    consulta: &[String], 
+    keywords_inicio: &[String],
     opcional: bool // Nuevo parámetro para indicar si las palabras clave de inicio son opcionales
 ) -> Result<usize, errores::Errores> {
     let mut index = 0;
@@ -108,7 +106,7 @@ pub enum SQLConsulta {
 impl SQLConsulta {
     //Documentar cuando la tenga terminada
     pub fn crear_consulta(
-        consulta: &String,
+        consulta: &str,
         ruta_tablas: &String,
     ) -> Result<SQLConsulta, errores::Errores> {
         // Primero eliminamos los espacios
@@ -116,7 +114,7 @@ impl SQLConsulta {
         if consulta_limpia.len() < 2{
             Err(errores::Errores::InvalidSyntax)?
         }
-        let consultas = vec!["select", "insert", "into","delete", "from", "update"];
+        let consultas = ["select", "insert", "into","delete", "from", "update"];
         // Usamos match para decidir el tipo de consulta
         match &consulta_limpia[0].to_lowercase() {
             tipo_consulta if tipo_consulta == consultas[0]   => {
@@ -164,15 +162,13 @@ impl SQLConsulta {
     }
 }
 
-pub fn mapear_campos(campos: &Vec<String>) -> HashMap<String, usize> {
+pub fn mapear_campos(campos: &[String]) -> HashMap<String, usize> {
     let mut campos_mapeados: HashMap<String, usize> = HashMap::new();
-    let mut indice: usize = 0;
-    for campo in campos {
+    for (indice,campo) in campos.iter().enumerate() {
         let indice_i: usize = indice;
         campos_mapeados.insert(campo.to_string(), indice_i);
-        indice += 1;
     }
-    return campos_mapeados;
+    campos_mapeados
 }
 pub trait Verificaciones {
     fn verificar_campos_validos(
@@ -196,7 +192,7 @@ pub fn obtener_campos_consulta_orden_por_defecto(campos: &HashMap<String, usize>
     campos_tabla
 }
 
-pub fn parsear_consulta_de_comando(consulta: &String) -> Vec<String> {
+pub fn parsear_consulta_de_comando(consulta: &str) -> Vec<String> {
     return consulta
         .split_whitespace()
         .map(|s| s.to_string())

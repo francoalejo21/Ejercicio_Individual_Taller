@@ -38,8 +38,6 @@ pub struct ConsultaInsert {
     pub campos_consulta: Vec<String>,
     pub campos_posibles: HashMap<String, usize>,
     pub valores: Vec<String>,
-    pub vector_valores: Vec<Vec<String>>,
-    pub campos_mapeados_tipos_de_datos :Vec<HashMap<String,String>>,
     pub campos_mapeados_valores :Vec<HashMap<String,String>>,
     pub tabla: Vec<String>,
     pub ruta_tabla: String,
@@ -68,17 +66,13 @@ impl ConsultaInsert {
         caracteres_delimitadores = vec![','];
         let campos_consulta = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from("(")], HashSet::from([")".to_string()]), caracteres_delimitadores, true, false)?;
         let campos_posibles: HashMap<String, usize> = HashMap::new();
-        let vector_valores: Vec<Vec<String>> = Vec::new();
         let ruta_tabla = ruta_a_tablas.to_string(); 
         let valores: Vec<String> = Self::parsear_cualquier_cosa(consulta, vec![String::from("values")], HashSet::from(["".to_string()]), vec![','], false, false)?;
-        let campos_mapeados_tipos_de_datos: Vec<HashMap<String,String>> = Vec::new();
         let campos_mapeados_valores: Vec<HashMap<String,String>> = Vec::new();
         Ok(ConsultaInsert {
             campos_consulta,
             campos_posibles,
             valores,
-            vector_valores,
-            campos_mapeados_tipos_de_datos,
             campos_mapeados_valores,
             tabla,
             ruta_tabla,
@@ -211,8 +205,8 @@ impl MetodosConsulta for ConsultaInsert {
                 } 
             }
             let linea = linea.join(",");
-            if let Err(_) = writeln!(escritor, "{}", linea) {
-                return Err(errores::Errores::Error);
+            if writeln!(escritor, "{}", linea).is_err() {
+                Err(errores::Errores::Error)?;
             }
         }
         // Asegurarse de escribir en el archivo
@@ -234,7 +228,7 @@ impl Verificaciones for ConsultaInsert {
                 return false;
             }
         }
-        return true;
+        true
     }
 }
 
@@ -243,20 +237,17 @@ fn verificar_valores_tipo_valido(campos_mapeados_valores: &Vec<HashMap<String,St
     for campos_mapeados in campos_mapeados_valores {
         for (campo, valor) in campos_mapeados {
             println!("campo {} valor {}", campo, valor);
-            if valor == ""{
+            if valor.is_empty(){
                 continue;
             }
             match tipos_datos.get(campo) {
                 Some(tipo) => {
-                    if tipo == "Integer" {
-                        if !valor.chars().all(char::is_numeric) {
-                            Err(errores::Errores::Error)?;
-                        }
+                    println!("{}",tipo);
+                    if tipo == "Integer" && valor.parse::<i32>().is_err() {
+                        Err(errores::Errores::Error)?;
                     }
-                    if tipo == "String" {
-                        if !valor.starts_with("'") || !valor.ends_with("'") {
-                            Err(errores::Errores::Error)?;
-                        }
+                    if tipo == "String" && (!valor.starts_with("'") && !valor.ends_with("'") ){
+                        Err(errores::Errores::Error)?;
                     }
                 }
                 None => Err(errores::Errores::Error)?,
@@ -266,7 +257,7 @@ fn verificar_valores_tipo_valido(campos_mapeados_valores: &Vec<HashMap<String,St
     Ok(())
 }
 
-fn mapear_campos_valores(vector_valores: &Vec<Vec<String>>, campos_consulta : &Vec<String>)->Vec<HashMap<String, String>>{
+fn mapear_campos_valores(vector_valores: &Vec<Vec<String>>, campos_consulta : &[String])->Vec<HashMap<String, String>>{
     let mut campos_mapeados_valores: Vec<HashMap<String, String>> = Vec::new();
     for fila_valores in vector_valores{
         let mut campos_mapeados_valores_fila: HashMap<String, String> = HashMap::new();
@@ -278,15 +269,13 @@ fn mapear_campos_valores(vector_valores: &Vec<Vec<String>>, campos_consulta : &V
     campos_mapeados_valores
 }
 
-fn mapear_tipos_datos(columnas :&Vec<String>, columna1 :&Vec<String>)->HashMap<String,String>{
+fn mapear_tipos_datos(columnas :&[String], columna1 :&[String])->HashMap<String,String>{
     let mut campos_mapeados_tipos_de_datos: HashMap<String, String> = HashMap::new();
-    let mut indice :usize= 0;
-    for campo in columna1{
+    for (indice, campo) in columna1.iter().enumerate(){
         match campo.chars().all(char::is_numeric){
             true => campos_mapeados_tipos_de_datos.insert(columnas[indice].to_string(), "Integer".to_string()),
             false => campos_mapeados_tipos_de_datos.insert(columnas[indice].to_string(), "String".to_string())
             };
-        indice += 1;
     }       
     campos_mapeados_tipos_de_datos
 }
@@ -396,36 +385,7 @@ fn construir_vector_valores(valores: &Vec<String>) -> Vec<Vec<String>> {
     vector_valores
 }
 
-
-fn rellenar_valores_vacios_entre_comas_de_cada_filas(valores: &Vec<Vec<String>>) -> Vec<Vec<String>> {
-    let mut vector_valores: Vec<Vec<String>> = Vec::new();
-
-    for fila_valores in valores {
-        let mut fila_valores_rellenados: Vec<String> = Vec::new();
-        let mut esperando_valor = true;
-
-        for valor in fila_valores {
-            if valor == "," {
-                if esperando_valor {
-                    fila_valores_rellenados.push("NULL".to_string());
-                }
-                esperando_valor = true;
-            } else {
-                fila_valores_rellenados.push(valor.to_string());
-                esperando_valor = false;
-            }
-        }
-
-        if esperando_valor {
-            fila_valores_rellenados.push("NULL".to_string());
-        }
-
-        vector_valores.push(fila_valores_rellenados);
-    }
-
-    vector_valores
-}
-fn verificar_cantidad_valores_validos(vector_valores: &Vec<Vec<String>>, campos_consulta: &Vec<String>) -> Result<(), errores::Errores> {
+fn verificar_cantidad_valores_validos(vector_valores: &Vec<Vec<String>>, campos_consulta: &[String]) -> Result<(), errores::Errores> {
     //verificar que la cantidad a  valores a insertar sean la misma que la cantidad de campos
     for fila_valores in vector_valores {
         if fila_valores.len() != campos_consulta.len() {

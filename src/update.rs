@@ -1,17 +1,16 @@
 use crate::archivo::{leer_archivo, parsear_linea_archivo, procesar_ruta};
-use crate::consulta::{mapear_campos, obtener_campos_consulta_orden_por_defecto, MetodosConsulta, Parseables, Verificaciones};
+use crate::consulta::{mapear_campos, MetodosConsulta, Parseables, Verificaciones};
 use crate::validador_where::ValidadorSintaxis;
 use crate::verificaciones_sintaxis::verificar_orden_keywords;
 use std::collections::HashSet;
-use crate::select::{convertir_lower_case_restricciones, eliminar_comas};
-use crate::select::ConsultaSelect;
+use crate::select::convertir_lower_case_restricciones;
 use crate::validador_where::ValidadorOperandosValidos;
 use std::fs;
 use std::io::BufReader;
 use crate::abe::ArbolExpresiones;
 use crate::errores;
 use crate::parseos::parseo;
-use std::fs::{OpenOptions, File};
+use std::fs::File;
 use std::path::Path;
 use std::{
     collections::HashMap,
@@ -151,21 +150,18 @@ impl MetodosConsulta for ConsultaUpdate {
         let (_,tipos_datos) = parsear_linea_archivo(&tipos_datos);
         println!("linea parseada {:?}",tipos_datos);
         let tipos_datos = mapear_tipos_datos(&campos_validos,&tipos_datos);
-        ////77777
-                        
-        
-        
-        ///esto cambia ya que los campos son: campo1 = valor1, campo2 = valor2, campo3 = valor3
-        ///  y debo revisar que el campo sea valido y que el valor sea valido
-        /// y tambien que solo haya entre dos campos un igual cada campo,valor esta separado por una coma
-        /// y cada campo,valor esta separado por un igual
+    
         println!("campos consulta antes de constuir vector {:?}", self.campos_consulta);
         let campos_valores= construir_vector_campos_comparador_igual_valores(&self.campos_consulta);
+        println!("campos consulta despues de construir vector {:?}", campos_valores);
         verificar_sintaxis_campos_valores(&campos_valores)?;
-        println!("campos consulta despues de construir vector {:?}", self.campos_consulta);
+        
         
         let campo_valores_validados  = verificar_campos_validos_y_valores_validos(campos_valores, &self.campos_posibles, &tipos_datos)?;
+        println!("campos valores validados {:?}", campo_valores_validados);
         let campos_mapeados_valores = mapear_campos_valores_terna(&campo_valores_validados);
+
+        println!("campos mapeados valores_terna {:?}", campos_mapeados_valores);
         self.campos_mapeados_valores = campos_mapeados_valores;
         
         println!("campos mapeados valores__ {:?}", self.campos_mapeados_valores);
@@ -175,7 +171,7 @@ impl MetodosConsulta for ConsultaUpdate {
         //verificamos que la condicion where sea valida y los operandos sean validos
         self.condiciones = convertir_lower_case_restricciones(&self.condiciones, &self.campos_posibles);
         let mut validador_where = ValidadorSintaxis::new(&self.condiciones);
-        if self.condiciones.len() != 0 {
+        if self.condiciones.is_empty() {
             if !validador_where.validar(){
                 return Err(errores::Errores::InvalidSyntax);
             }
@@ -238,7 +234,7 @@ impl MetodosConsulta for ConsultaUpdate {
         } else {
             for linea in lector.lines() {
                 let linea = linea.map_err(|_| errores::Errores::Error)?; // Error al leer la línea
-                let  (_,mut campos) = parsear_linea_archivo(&linea);
+                let  (mut campos,_) = parsear_linea_archivo(&linea);
 
                 // Verificar si la línea cumple con las condiciones WHERE
                 if arbol_exp.evalua( &self.campos_posibles, &campos) {
@@ -252,8 +248,8 @@ impl MetodosConsulta for ConsultaUpdate {
                     }
                 }
                 let linea_modificada = campos.join(",");
-                if let Err(_) = writeln!(escritor, "{}", linea_modificada) {
-                    return Err(errores::Errores::Error); // Error al escribir la línea
+                if writeln!(escritor, "{}", linea_modificada).is_err() {
+                    Err(errores::Errores::Error)?; // Error al escribir la línea
                 }
             }
         }
@@ -278,59 +274,17 @@ impl Verificaciones for ConsultaUpdate {
                 return false;
             }
         }
-        return true;
+        true
     }
 }
 
-fn verificar_valores_tipo_valido(campos_mapeados_valores: &Vec<HashMap<String,String>>, tipos_datos: &HashMap<String,String>)->Result<(),errores::Errores>{
-    println!("los tipos de datos disponibles son{:?}",tipos_datos);
-    for campos_mapeados in campos_mapeados_valores {
-        for (campo, valor) in campos_mapeados {
-            println!("campo {} valor {}", campo, valor);
-            if valor == ""{
-                continue;
-            }
-            match tipos_datos.get(campo) {
-                Some(tipo) => {
-                    if tipo == "Integer" {
-                        if !valor.chars().all(char::is_numeric) {
-                            Err(errores::Errores::Error)?;
-                        }
-                    }
-                    if tipo == "String" {
-                        if !valor.starts_with("'") || !valor.ends_with("'") {
-                            Err(errores::Errores::Error)?;
-                        }
-                    }
-                }
-                None => Err(errores::Errores::Error)?,
-            }
-        }
-    }
-    Ok(())
-}
-
-fn mapear_campos_valores(vector_valores: &Vec<Vec<String>>, campos_consulta : &Vec<String>)->Vec<HashMap<String, String>>{
-    let mut campos_mapeados_valores: Vec<HashMap<String, String>> = Vec::new();
-    for fila_valores in vector_valores{
-        let mut campos_mapeados_valores_fila: HashMap<String, String> = HashMap::new();
-        for (indice, valor) in fila_valores.iter().enumerate(){
-            campos_mapeados_valores_fila.insert(campos_consulta[indice].to_string(), valor.to_string());
-        }
-        campos_mapeados_valores.push(campos_mapeados_valores_fila);
-    }
-    campos_mapeados_valores
-}
-
-fn mapear_tipos_datos(columnas :&Vec<String>, columna1 :&Vec<String>)->HashMap<String,String>{
+fn mapear_tipos_datos(columnas :&[String], columna1 :&[String])->HashMap<String,String>{
     let mut campos_mapeados_tipos_de_datos: HashMap<String, String> = HashMap::new();
-    let mut indice :usize= 0;
-    for campo in columna1{
+    for (indice,campo) in columna1.iter().enumerate(){
         match campo.chars().all(char::is_numeric){
             true => campos_mapeados_tipos_de_datos.insert(columnas[indice].to_string(), "Integer".to_string()),
             false => campos_mapeados_tipos_de_datos.insert(columnas[indice].to_string(), "String".to_string())
             };
-        indice += 1;
     }       
     campos_mapeados_tipos_de_datos
 }
@@ -371,114 +325,6 @@ fn unir_literales_spliteados(consulta_spliteada: &Vec<String>) -> Vec<String> {
     valores
 }
 
-fn verificar_sintaxis_valores(valores: &Vec<String>) -> Result<(), errores::Errores> {
-    let mut parentesis_abierto = 0;
-
-    for valor in valores {
-        for c in valor.chars() {
-            match c {
-                '(' => {
-                    parentesis_abierto += 1;
-                }
-                ')' => {
-                    if parentesis_abierto == 0 {
-                        return Err(errores::Errores::InvalidSyntax); // Cierre de paréntesis sin apertura
-                    }
-                    parentesis_abierto -= 1;
-                }
-                _ => {
-                    // Ignorar otros caracteres
-                }
-            }
-        }
-    }
-
-    if parentesis_abierto != 0 {
-        return Err(errores::Errores::InvalidSyntax); // Hay paréntesis abiertos que no se han cerrado
-    }
-    
-    Ok(()) // La sintaxis es válida
-}
-
-fn construir_vector_valores(valores: &Vec<String>) -> Vec<Vec<String>> {
-    let mut vector_valores: Vec<Vec<String>> = Vec::new();
-    let mut fila_valores: Vec<String> = Vec::new();
-    let mut parentesis_abierto = false;
-    let mut ultimo:Option<String> = None;
-    for valor in valores {
-        match valor.as_str() {
-            "(" => {
-                // Iniciar una nueva fila
-                parentesis_abierto = true;
-                fila_valores.clear(); // Limpiar la fila al iniciar
-            }
-            ")" => {
-                // Finalizar la fila actual solo si hay valores en ella
-                if ultimo == Some(",".to_string()){
-                    fila_valores.push(String::new()); // Campo vacío por coma
-                }
-                vector_valores.push(fila_valores.clone());
-                fila_valores.clear();
-                parentesis_abierto = false;
-            }
-            "," => {
-                // Agregar un campo vacío solo si estamos dentro de paréntesis
-                if parentesis_abierto && ultimo == Some("(".to_string()) || ultimo == Some(",".to_string()) {
-                    fila_valores.push(String::new()); // Campo vacío por coma
-                }
-            }
-            _ => {
-                // Agregar el valor si estamos dentro de paréntesis
-                if parentesis_abierto {
-                    fila_valores.push(valor.to_string());
-                }
-            }
-        }
-        ultimo = Some(valor.to_string());
-    }
-
-    vector_valores
-}
-
-
-fn rellenar_valores_vacios_entre_comas_de_cada_filas(valores: &Vec<Vec<String>>) -> Vec<Vec<String>> {
-    let mut vector_valores: Vec<Vec<String>> = Vec::new();
-
-    for fila_valores in valores {
-        let mut fila_valores_rellenados: Vec<String> = Vec::new();
-        let mut esperando_valor = true;
-
-        for valor in fila_valores {
-            if valor == "," {
-                if esperando_valor {
-                    fila_valores_rellenados.push("NULL".to_string());
-                }
-                esperando_valor = true;
-            } else {
-                fila_valores_rellenados.push(valor.to_string());
-                esperando_valor = false;
-            }
-        }
-
-        if esperando_valor {
-            fila_valores_rellenados.push("NULL".to_string());
-        }
-
-        vector_valores.push(fila_valores_rellenados);
-    }
-
-    vector_valores
-}
-fn verificar_cantidad_valores_validos(vector_valores: &Vec<Vec<String>>, campos_consulta: &Vec<String>) -> Result<(), errores::Errores> {
-    //verificar que la cantidad a  valores a insertar sean la misma que la cantidad de campos
-    for fila_valores in vector_valores {
-        if fila_valores.len() != campos_consulta.len() {
-            Err(errores::Errores::InvalidSyntax)?;
-        }
-    }
-    Ok(())
-}
-
 fn verificar_sintaxis_campos_valores(campos_valores: &Vec<Vec<String>>) -> Result<(), errores::Errores> {
     for vec in campos_valores {
         if vec.len() != 3 {
@@ -492,7 +338,7 @@ fn verificar_sintaxis_campos_valores(campos_valores: &Vec<Vec<String>>) -> Resul
         let operador = &vec[1];
         // Verificar que el campo no esté vacío
         if campo.is_empty() {
-            return Err(errores::Errores::InvalidSyntax)?;
+            Err(errores::Errores::InvalidSyntax)?;
         }
         // Verificar que el segundo elemento sea '='
         if operador != "=" {
@@ -525,30 +371,22 @@ fn verificar_campos_validos_y_valores_validos(
         let campo = campos_valores_validados[0].to_lowercase();
         let valor = &campos_valores_validados[2];
         println!("campo {:?}", campo);
-        if campo.starts_with("'") && campo.ends_with("'") {
+        if valor.is_empty() {
+            {};
+        }else if campo.starts_with("'") && campo.ends_with("'") {
             return Err(errores::Errores::InvalidSyntax);
-        }
-        if !campos_posibles.contains_key(&campo) {
+        }else if !campos_posibles.contains_key(&campo) {
             println!("no esta en los campos posibles :  {:?}", campo);
             return Err(errores::Errores::InvalidColumn);
-        }
-        if valor.starts_with("'") && valor.ends_with("'") {
-            match tipos_datos.get(&campo) {
-                Some(tipo) => {
-                    if tipo == "Integer" {
-                        return Err(errores::Errores::Error);
-                    }
+        }else if valor.starts_with("'") && valor.ends_with("'") {
+            if let Some(tipo) = tipos_datos.get(&campo) {
+                if tipo == "Integer" {
+                    Err(errores::Errores::Error)?;
                 }
-                None => {} // Nada porque puede haber valores vacíos
             }
-        } else {
-            match tipos_datos.get(&campo) {
-                Some(tipo) => {
-                    if tipo == "String" {
-                        return Err(errores::Errores::Error);
-                    }
-                }
-                None => {} // Nada porque puede haber valores vacíos
+        } else if let Some(tipo) = tipos_datos.get(&campo) {
+            if tipo == "String" {
+                Err(errores::Errores::Error)?;
             }
         }
 
@@ -560,7 +398,7 @@ fn verificar_campos_validos_y_valores_validos(
 }
 
 
-fn construir_vector_campos_comparador_igual_valores(valores: &Vec<String>) -> Vec<Vec<String>> {
+/*fn construir_vector_campos_comparador_igual_valores(valores: &Vec<String>) -> Vec<Vec<String>> {
     let mut vector_terna: Vec<Vec<String>> = Vec::new();
     let mut fila_campos_igual_valores: Vec<String> = Vec::new();
     let mut ultimo:Option<String> = None;
@@ -568,17 +406,15 @@ fn construir_vector_campos_comparador_igual_valores(valores: &Vec<String>) -> Ve
     for valor in valores {
         match valor.as_str() {
             "," => {
-                if ultimo == Some("=".to_string()) || ultimo == None{
+                if ultimo == Some("=".to_string()) || ultimo == None {
                     fila_campos_igual_valores.push(String::new()); // Campo vacío por coma
                 }
                 vector_terna.push(fila_campos_igual_valores.clone());
-                println!("fila campos igual valores {:?}", fila_campos_igual_valores);
                 fila_campos_igual_valores.clear();
             }
             _ => {
                 // Agregar el valor si estamos dentro de paréntesis
                 fila_campos_igual_valores.push(valor.to_string());
-                println!("fila campos igual valores {:?}", fila_campos_igual_valores);
             }
         }
         ultimo = Some(valor.to_string());
@@ -589,6 +425,56 @@ fn construir_vector_campos_comparador_igual_valores(valores: &Vec<String>) -> Ve
     }
     //si quedo algo que no es una coma al final de la lista
     else if !fila_campos_igual_valores.is_empty(){
+        vector_terna.push(fila_campos_igual_valores);
+    }
+
+    vector_terna
+}
+*/
+fn construir_vector_campos_comparador_igual_valores(valores: &Vec<String>) -> Vec<Vec<String>> {
+    let mut vector_terna: Vec<Vec<String>> = Vec::new();
+    let mut fila_campos_igual_valores: Vec<String> = Vec::new();
+    let mut esperando_valor = false; // Indicador para saber si falta un valor después del '='
+
+    println!("campos_y_valores_antes de crear vector: {:?}", valores);
+    
+    for valor in valores {
+        match valor.as_str() {
+            "=" => {
+                if fila_campos_igual_valores.len() == 1 {
+                    // Si tenemos un campo antes de "=", añadimos "=" y esperamos un valor
+                    fila_campos_igual_valores.push("=".to_string());
+                    esperando_valor = true;
+                } else {
+                    println!("Error de sintaxis: '=' sin campo previo.");
+                }
+            }
+            "," => {
+                if esperando_valor {
+                    // Si estamos esperando un valor y viene una coma, significa que el valor está vacío
+                    fila_campos_igual_valores.push("".to_string());
+                    esperando_valor = false;
+                }
+                // Agregar la terna actual y limpiar
+                vector_terna.push(fila_campos_igual_valores.clone());
+                fila_campos_igual_valores.clear();
+            }
+            _ => {
+                // Cualquier otro valor se añade a la terna actual
+                fila_campos_igual_valores.push(valor.to_string());
+                if esperando_valor {
+                    esperando_valor = false; // Ya recibimos el valor después del "="
+                }
+            }
+        }
+    }
+    
+    // Si al final queda algún valor o terna sin procesar, lo añadimos
+    if esperando_valor {
+        // Si quedó un "=" esperando un valor al final, agregamos un valor vacío
+        fila_campos_igual_valores.push("".to_string());
+    }
+    if !fila_campos_igual_valores.is_empty() {
         vector_terna.push(fila_campos_igual_valores);
     }
 
@@ -614,29 +500,3 @@ fn remover_comillas(valor :&String)->String{
     }
     valor_parseado
 }
-/*
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::HashMap;
-
-    #[test]
-    fn test_verificacion_campos_validos() {
-        let mut campos_validos: HashMap<String, usize> = HashMap::new();
-        campos_validos.insert("nombre".to_string(), 0);
-        campos_validos.insert("edad".to_string(), 1);
-
-        let mut campos_consulta = vec!["nombre".to_string(), "edad".to_string()];
-        assert!(ConsultaInsert::verificar_campos_validos(
-            &campos_validos,
-            &mut campos_consulta
-        ));
-
-        let mut campos_invalidos = vec!["nombre".to_string(), "altura".to_string()];
-        assert!(!ConsultaInsert::verificar_campos_validos(
-            &campos_validos,
-            &mut campos_invalidos
-        ));
-    }
-}
-*/
