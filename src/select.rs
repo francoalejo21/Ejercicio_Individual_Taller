@@ -1,18 +1,31 @@
 use crate::archivo::{self, leer_archivo, procesar_ruta};
 use crate::consulta::{
-    mapear_campos, obtener_campos_consulta_orden_por_defecto, MetodosConsulta, Parseables,
-    Verificaciones,
+    mapear_campos, obtener_campos_consulta_orden_por_defecto, MetodosConsulta, Parseables, Verificaciones
 };
 
 use crate::abe::ArbolExpresiones;
 use crate::validador_where::ValidadorOperandosValidos;
-use crate::ordenamiento;
 use crate::verificaciones_sintaxis::verificar_orden_keywords;
 use crate::{errores, validador_where::ValidadorSintaxis};
 use archivo::parsear_linea_archivo;
-
+use crate::parseos::parseo;
+use crate::parseos::unir_literales_spliteados;
 use std::{collections::{HashMap, HashSet}, io::BufRead};
-//TODO: implementar restricciones, ordenamiento y mejorar el parseo
+
+const CARACTERES_DELIMITADORES: &[char] = &[';', ',', '=', '<', '>', '(', ')'];
+const TODO: &str = "*";
+const COMILLA_SIMPLE: &str = "'";
+const SELECT: &str = "select";
+const FROM: &str = "from";
+const WHERE: &str = "where";
+const ORDER: &str = "order";
+const BY: &str = "by";
+const CARACTER_VACIO: &str = "";
+const PUNTO_COMA: &str = ";";
+const COMA: &str = ",";
+const ASCENDENTE: &str = "asc";
+const DESCENDENTE: &str = "desc";
+
 
 /// Representa una consulta SQL de selección.
 ///
@@ -59,19 +72,17 @@ impl ConsultaSelect {
     /// Retorna una instancia de `ConsultaSelect` con los campos, tabla, restricciones y
     /// ordenamiento extraídos.
 
-    pub fn crear(consulta: &[String], ruta_a_tablas: &String) -> Result<ConsultaSelect,errores::Errores> {
-        let palabras_reservadas = vec!["select", "from", "where", "order", "by"];        
+    pub fn crear(consulta: &Vec<String>, ruta_a_tablas: &String) -> Result<ConsultaSelect,errores::Errores> {
+        let palabras_reservadas = vec![SELECT, FROM, WHERE, ORDER, BY];        
         verificar_orden_keywords(consulta, palabras_reservadas)?;
-        let mut caracteres_delimitadores: Vec<char> = vec![','];
-        let campos_consulta = Self::parsear_cualquier_cosa(consulta, vec![String::from("select")], HashSet::from(["from".to_string()]), caracteres_delimitadores, true, false)?;
+        let consulta_spliteada = &parseo(consulta, CARACTERES_DELIMITADORES);
+        let consulta = &unir_literales_spliteados(consulta_spliteada);
+        let campos_consulta = Self::parsear_cualquier_cosa(consulta, vec![String::from(SELECT)], HashSet::from([FROM.to_string()]), true, false)?;
         let campos_posibles: HashMap<String, usize> = HashMap::new();
         let ruta_tabla = ruta_a_tablas.to_string(); 
-        caracteres_delimitadores = vec![]; //no hay delimitadores
-        let tabla: Vec<String> = Self::parsear_cualquier_cosa(consulta, vec![String::from("from")], HashSet::from(["where".to_string(),"order".to_string(), "".to_string()]), caracteres_delimitadores, false, false)?;
-        caracteres_delimitadores = vec!['=','<','>','(',')'];
-        let restricciones: Vec<String> = Self::parsear_cualquier_cosa(consulta, vec![String::from("where")], HashSet::from(["order".to_string(), "".to_string()]), caracteres_delimitadores, false, true)?;
-        caracteres_delimitadores = vec![','];
-        let ordenamiento: Vec<String> = Self::parsear_cualquier_cosa(consulta, vec![String::from("order"),String::from("by")], HashSet::from(["".to_string()]), caracteres_delimitadores, true, true)?;
+        let tabla: Vec<String> = Self::parsear_cualquier_cosa(consulta, vec![String::from(FROM)], HashSet::from([WHERE.to_string(),ORDER.to_string(), CARACTER_VACIO.to_string(),PUNTO_COMA.to_string()]), false, false)?;
+        let restricciones: Vec<String> = Self::parsear_cualquier_cosa(consulta, vec![String::from(WHERE)], HashSet::from([ORDER.to_string(), CARACTER_VACIO.to_string(),PUNTO_COMA.to_string()]), false, true)?;
+        let ordenamiento: Vec<String> = Self::parsear_cualquier_cosa(consulta, vec![String::from(ORDER),String::from(BY)], HashSet::from([CARACTER_VACIO.to_string(), PUNTO_COMA.to_string()]), true, true)?;
         Ok(ConsultaSelect {
             campos_consulta,
             tabla,
@@ -145,7 +156,7 @@ impl MetodosConsulta for ConsultaSelect {
 
         let ordenamientos = obtener_ordenamientos(&self.ordenamiento);
         let mut vector_almacenar: Vec<Vec<String>> = Vec::new();
-
+        let mut seleccionados = 0;
         for registro in lector.lines() {
             let (registro_parseado, _) = registro.map_err(|_| errores::Errores::Error).map(|r| parsear_linea_archivo(&r))?;
             let campos_seleccionados: Vec<&usize> = self.campos_consulta.iter()
@@ -155,13 +166,13 @@ impl MetodosConsulta for ConsultaSelect {
             if !arbol_exp.arbol_vacio() && !arbol_exp.evalua(&self.campos_posibles, &registro_parseado) {
                 continue;
             }
-
+            seleccionados+=1;
             let linea: Vec<String> = campos_seleccionados.iter()
                 .map(|&&campo| registro_parseado[campo].to_string())
                 .collect();
 
             if ordenamientos.is_empty() {
-                println!("{}", linea.join(","));
+                println!("{}", linea.join(COMA));
             } else {
                 vector_almacenar.push(linea);
             }
@@ -169,10 +180,13 @@ impl MetodosConsulta for ConsultaSelect {
 
         if !ordenamientos.is_empty() {
             let orden_ordenamientos = reemplazar_string_por_usize(ordenamientos, &self.campos_posibles);
-            ordenamiento::ordenar_consultas_multiples(&mut vector_almacenar, orden_ordenamientos);
+            ordenar_consultas_multiples(&mut vector_almacenar, orden_ordenamientos);
             for linea in vector_almacenar {
-                println!("{}", linea.join(","));
+                println!("{}", linea.join(COMA));
             }
+        }
+        if seleccionados == 0{
+            Err(errores::Errores::Error)?
         }
 
         Ok(())
@@ -193,8 +207,8 @@ impl Verificaciones for ConsultaSelect {
         campos_validos: &HashMap<String, usize>,
         campos_consulta: &mut Vec<String>,
     ) -> bool {
-        if campos_consulta.len() == 1 && campos_consulta[0] == "*"{
-            campos_consulta.pop(); //Me saco de encima el "*""
+        if campos_consulta.len() == 1 && campos_consulta[0] == TODO{
+            campos_consulta.pop(); //Me saco de encima el "*CARACTER_VACIO
                                     //debo reemplazar ese caracter por todos los campos válidos
             let campos = &obtener_campos_consulta_orden_por_defecto(campos_validos);
             for campo in campos {
@@ -217,11 +231,11 @@ pub fn verificar_sintaxis_campos(campos: &[String])->Result<(),errores::Errores>
     // entre campos devolver error tambien
     let mut index: usize = 0;
     while index < campos.len(){
-        if campos[index] == ","{
+        if campos[index] == COMA{
             if index == 0 || index == campos.len()-1{
                 Err(errores::Errores::InvalidSyntax)?
             }
-            if campos[index+1] == ","{
+            if campos[index+1] == COMA{
                 Err(errores::Errores::InvalidSyntax)?
             }
         }
@@ -234,7 +248,7 @@ pub fn eliminar_comas(campos : &Vec<String>)-> Vec<String>{
     //iterar sobre el vector de campos y eliminar las comas
     let mut campos_limpio: Vec<String> = Vec::new();
     for campo in campos{
-        if campo != ","{
+        if campo != COMA{
             campos_limpio.push(campo.to_string());
         }
     }
@@ -253,8 +267,8 @@ fn verificar_sintaxis_ordenamiento(ordenamiento: &[String]) -> Result<(), errore
     while index < ordenamiento.len() {
         let campo_actual = &ordenamiento[index].to_lowercase();
 
-        if campo_actual == "," {
-            if index == 0 || index == ordenamiento.len() - 1 || ordenamiento[index + 1] == "," {
+        if campo_actual == COMA {
+            if index == 0 || index == ordenamiento.len() - 1 || ordenamiento[index + 1] == COMA {
                 return Err(errores::Errores::InvalidSyntax);
             }
             esperando_coma = false;
@@ -264,13 +278,13 @@ fn verificar_sintaxis_ordenamiento(ordenamiento: &[String]) -> Result<(), errore
                 return Err(errores::Errores::InvalidSyntax);
             }
             if esperando_asc_desc {
-                if campo_actual != "asc" && campo_actual != "desc" {
+                if campo_actual != ASCENDENTE && campo_actual != DESCENDENTE {
                     return Err(errores::Errores::InvalidSyntax);
                 }
                 esperando_asc_desc = false;
                 esperando_coma = true;
             } else {
-                esperando_asc_desc = index < ordenamiento.len() - 1 && ordenamiento[index + 1] != ",";
+                esperando_asc_desc = index < ordenamiento.len() - 1 && ordenamiento[index + 1] != COMA;
                 esperando_coma = !esperando_asc_desc;
             }
         }
@@ -287,7 +301,7 @@ fn verificar_sintaxis_ordenamiento(ordenamiento: &[String]) -> Result<(), errore
 fn verificar_campos_validos_ordenamientos(ordenamiento : &Vec<String>, campos_mapeados: &HashMap<String,usize>)->bool{
     //asumiendo que la sintaxis de los ordenamientos es correcta, iterar sobre el vector de ordenamientos y si algun campo no es un campo de la tabla devolver false
     for campo in ordenamiento{
-        if !campos_mapeados.contains_key(campo) && campo != "asc" && campo != "desc" && campo != ","{
+        if !campos_mapeados.contains_key(campo) && campo != ASCENDENTE && campo != DESCENDENTE && campo != COMA{
             return false;
         }
     }
@@ -301,7 +315,7 @@ fn obtener_ordenamientos(ordenamientos: &Vec<String>) -> Vec<(String, bool)> {
     let mut ordenamiento = true; // Por defecto es ASC
 
     for orden in ordenamientos {
-        if orden == "," {
+        if orden == COMA {
             // Asegurarse de que haya un campo antes de la coma
             if let Some(campo_valido) = campo {
                 ordenamientos_devolver.push((campo_valido, ordenamiento));
@@ -311,9 +325,9 @@ fn obtener_ordenamientos(ordenamientos: &Vec<String>) -> Vec<(String, bool)> {
             continue;
         }
 
-        if orden == "asc" {
+        if orden == ASCENDENTE {
             ordenamiento = true; // Orden ASC
-        } else if orden == "desc" {
+        } else if orden == DESCENDENTE {
             ordenamiento = false; // Orden DESC
         } else {
             // Si es un campo, lo guardamos para el próximo ordenamiento
@@ -334,13 +348,10 @@ fn obtener_ordenamientos(ordenamientos: &Vec<String>) -> Vec<(String, bool)> {
 pub fn convertir_lower_case_restricciones(restricciones: &Vec<String>, campos_mapeados: &HashMap<String, usize>) -> Vec<String> {
     // Iteramos sobre las restricciones y si el campo es un campo de la tabla lo convertimos a minúsculas y si es un operador and, or, not
     // también casteamos estos a lower case
-    println!("campos mapeados : {:?}", campos_mapeados);
     let mut restricciones_lower: Vec<String> = Vec::new();
     for restriccion in restricciones {
         let restriccion_lower = restriccion.to_lowercase();
-        if campos_mapeados.contains_key(&restriccion_lower) && !es_literal(restriccion) && !restriccion.chars().all(char::is_numeric) {
-            restricciones_lower.push(restriccion_lower);
-        } else if ["and", "or", "not"].contains(&restriccion_lower.as_str()) {
+        if campos_mapeados.contains_key(&restriccion_lower) && !es_literal(restriccion) && !restriccion.chars().all(char::is_numeric) || ["and", "or", "not"].contains(&restriccion_lower.as_str()) {
             restricciones_lower.push(restriccion_lower);
         } else {
             restricciones_lower.push(restriccion.to_string());
@@ -350,7 +361,7 @@ pub fn convertir_lower_case_restricciones(restricciones: &Vec<String>, campos_ma
 }
 
 fn es_literal(operando: &str) -> bool {
-    operando.starts_with("'") && operando.ends_with("'")
+    operando.starts_with(COMILLA_SIMPLE) && operando.ends_with(COMILLA_SIMPLE)
 }
 
 fn reemplazar_string_por_usize(ordenamientos: Vec<(String,bool)>, campos_posibles: &HashMap<String,usize>)->Vec<(usize,bool)>{
@@ -364,6 +375,35 @@ fn reemplazar_string_por_usize(ordenamientos: Vec<(String,bool)>, campos_posible
         ordenamientos_usize.push((*campo_usize,orden));
     }
     ordenamientos_usize
+}
+
+fn ordenar_consultas_multiples(
+    filas: &mut [Vec<String>], 
+    columnas_orden: Vec<(usize, bool)>
+) {
+    filas.sort_by(|a, b| {
+        for (columna_orden, ascendente) in &columnas_orden {
+            let valor_a = &a[*columna_orden];
+            let valor_b = &b[*columna_orden];
+
+            // Comparación adicional si alguna columna es vacía
+            let cmp = match (valor_a.is_empty(), valor_b.is_empty()) {
+                (true, false) => std::cmp::Ordering::Less,    // La columna vacía es menor
+                (false, true) => std::cmp::Ordering::Greater, // La columna vacía es mayor
+                (true, true) => std::cmp::Ordering::Equal,    // Ambas son vacías, son iguales
+                _ => valor_a.cmp(valor_b),                    // Comparar normalmente si no están vacías
+            };
+
+            if cmp != std::cmp::Ordering::Equal {
+                return if *ascendente {
+                    cmp
+                } else {
+                    cmp.reverse()
+                };
+            }
+        }
+        std::cmp::Ordering::Equal
+    });
 }
 /* 
 #[cfg(test)]
@@ -384,7 +424,7 @@ mod tests {
             tokens,
             vec![
                 "SELECT", "campo1,campo2", "FROM", "tabla", "WHERE", "campo1", "=", "'valor1'",
-                "ORDER", "BY", "campo2", "DESC"
+                ORDER, "BY", "campo2", DESCENDENTE
             ]
         );
     }
@@ -399,7 +439,7 @@ mod tests {
 
         assert_eq!(
             campos,
-            vec!["campo1","campo2","campo3"]
+            vec!["campo1COMAcampo2COMAcampo3"]
         );
     }
 
@@ -413,7 +453,7 @@ mod tests {
 
         assert_eq!(
             campos,
-            vec!["campo1","campo2","campo3"]
+            vec!["campo1COMAcampo2COMAcampo3"]
         );
     }
     #[test]
@@ -426,7 +466,7 @@ mod tests {
 
         assert_eq!(
             campos,
-            vec!["campo1","campo2","campo3"]
+            vec!["campo1COMAcampo2COMAcampo3"]
         );
     }
 
@@ -440,7 +480,7 @@ mod tests {
 
         assert_eq!(
             tablas,
-            vec!["tabla1,","tabla2,","tabla3"]
+            vec!["tabla1,COMAtabla2,COMAtabla3"]
         );
     }
     #[test]
@@ -453,7 +493,7 @@ mod tests {
 
         assert_eq!(
             tablas,
-            vec!["tabla1,","tabla2,","tabla3,", "tabla4,", "tabla5"]
+            vec!["tabla1,COMAtabla2,COMAtabla3,", "tabla4,", "tabla5"]
         );
     }
 
@@ -468,7 +508,7 @@ mod tests {
 
         assert_eq!(
             restricciones,
-            vec!["campo1", "=","'valor1'","AND", "campo2", "=", "'valor2'"]
+            vec!["campo1", "=COMA'valor1'COMAAND", "campo2", "=", "'valor2'"]
         );
     }
 
@@ -482,7 +522,7 @@ mod tests {
 
         assert_eq!(
             restricciones,
-            vec!["campo1", "=","'valor1'","AND", "campo2", "=", "'valor2'", "OR", "1","=", "1"]
+            vec!["campo1", "=COMA'valor1'COMAAND", "campo2", "=", "'valor2'", "OR", "1COMA=", "1"]
         );
     }
 
@@ -515,7 +555,7 @@ mod tests {
             consulta_select.restricciones,
             vec!["campo1", "=", "'valor1'"]
         );
-        assert_eq!(consulta_select.ordenamiento, vec!["campo2", "desc"]);
+        assert_eq!(consulta_select.ordenamiento, vec!["campo2", DESCENDENTE]);
         assert_eq!(consulta_select.ruta_tabla, "/ruta/a/tablas/tabla");
     }
  

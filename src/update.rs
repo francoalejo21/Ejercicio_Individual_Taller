@@ -9,13 +9,25 @@ use std::fs;
 use std::io::BufReader;
 use crate::abe::ArbolExpresiones;
 use crate::errores;
-use crate::parseos::parseo;
+use crate::parseos::{parseo,unir_literales_spliteados,remover_comillas};
 use std::fs::File;
 use std::path::Path;
 use std::{
     collections::HashMap,
     io::{BufRead, BufWriter, Write},
 };
+
+const CARACTERES_DELIMITADORES: &[char] = &['=',',',';','<','>','(',')'];
+const IGUAL: &str = "=";
+const COMILLA_SIMPLE: &str = "'";
+const UPDATE: &str = "update";
+const SET: &str = "set";
+const WHERE: &str = "where";
+const CARACTER_VACIO: &str = "";
+const PUNTO_COMA: &str = ";";
+const COMA: &str = ",";
+const INTEGER: &str = "Integer";
+const STRING: &str = "String";
 
 /// Representa una consulta SQL de inserción.
 ///
@@ -60,29 +72,16 @@ impl ConsultaUpdate {
     /// Una instancia de `ConsultaInsert`
 
     pub fn crear(consulta: &Vec<String>, ruta_a_tablas: &String) -> Result<ConsultaUpdate,errores::Errores> {
-        let palabras_reservadas = vec!["update", "set", "where"];  
+        let palabras_reservadas = vec![UPDATE, SET, WHERE];  
         verificar_orden_keywords(consulta, palabras_reservadas)?;
-        let mut caracteres_delimitadores = vec!['=',','];
-        let consulta_spliteada = &parseo(consulta, &caracteres_delimitadores);
+        let consulta_spliteada = &parseo(consulta, CARACTERES_DELIMITADORES);
         let consulta_spliteada = &unir_literales_spliteados(consulta_spliteada);
-        let tabla = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from("update")], HashSet::from(["set".to_string()]), caracteres_delimitadores, false, false)?;        
-        
-
-        println!("tabla {:?}", tabla);
-        caracteres_delimitadores = vec![','];
-        let campos_consulta = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from("set")], HashSet::from(["where".to_string(),"".to_string()]), caracteres_delimitadores, false, false)?;
-        println!("campos_consulta {:?}", campos_consulta);
-        
+        let tabla = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from(UPDATE)], HashSet::from([SET.to_string()]), false, false)?;        
+        let campos_consulta = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from(SET)], HashSet::from([WHERE.to_string(),CARACTER_VACIO.to_string(),PUNTO_COMA.to_string()]), false, false)?;
         let campos_posibles: HashMap<String, usize> = HashMap::new();
         let ruta_tabla = ruta_a_tablas.to_string(); 
-
         let campos_mapeados_valores: HashMap<String,String> = HashMap::new();
-
-        caracteres_delimitadores = vec!['=','<','>','(',')'];
-        println!("{:?}" ,consulta_spliteada);
-        let condiciones: Vec<String> = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from("where")], HashSet::from(["".to_string()]), caracteres_delimitadores, false, true)?;
-        println!("condiciones {:?}", condiciones);
-        println!("Pude crea consulta update");
+        let condiciones: Vec<String> = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from(WHERE)], HashSet::from([CARACTER_VACIO.to_string(),PUNTO_COMA.to_string()]), false, true)?;
         Ok(ConsultaUpdate {
             campos_consulta,
             campos_posibles,
@@ -95,31 +94,6 @@ impl ConsultaUpdate {
 }
 
 impl Parseables for ConsultaUpdate {
-    /* fn parsear_valores(_consulta: &Vec<String>, _index: &mut usize) -> Vec<Vec<String>> {
-        let mut lista_valores: Vec<Vec<String>> = Vec::new();
-        if _consulta[*_index] == ")" {
-            *_index += 1;
-        }
-        if _consulta[*_index] == "values" {
-            *_index += 1;
-        }
-
-        while *_index < _consulta.len() {
-            if _consulta[*_index] == "(" {
-                *_index += 1;
-            }
-            let mut valores = Vec::new();
-            while *_index < _consulta.len() && _consulta[*_index] != ")" {
-                let valor = &_consulta[*_index];
-
-                valores.push(valor.to_string());
-                *_index += 1;
-            }
-            lista_valores.push(valores);
-            *_index += 1;
-        }
-        lista_valores
-    } */
 }
 
 impl MetodosConsulta for ConsultaUpdate {
@@ -142,32 +116,22 @@ impl MetodosConsulta for ConsultaUpdate {
         let (_, campos_validos) = parsear_linea_archivo(&nombres_campos);
         self.campos_posibles = mapear_campos(&campos_validos);                
         
-
-
-        /////7777
         let mut tipos_datos = String::new();
         lector.read_line(&mut tipos_datos).map_err(|_| errores::Errores::Error)?;
         let (_,tipos_datos) = parsear_linea_archivo(&tipos_datos);
-        println!("linea parseada {:?}",tipos_datos);
         let tipos_datos = mapear_tipos_datos(&campos_validos,&tipos_datos);
-    
-        println!("campos consulta antes de constuir vector {:?}", self.campos_consulta);
+
         let campos_valores= construir_vector_campos_comparador_igual_valores(&self.campos_consulta);
-        println!("campos consulta despues de construir vector {:?}", campos_valores);
         verificar_sintaxis_campos_valores(&campos_valores)?;
         
         
         let campo_valores_validados  = verificar_campos_validos_y_valores_validos(campos_valores, &self.campos_posibles, &tipos_datos)?;
-        println!("campos valores validados {:?}", campo_valores_validados);
+
         let campos_mapeados_valores = mapear_campos_valores_terna(&campo_valores_validados);
 
-        println!("campos mapeados valores_terna {:?}", campos_mapeados_valores);
+
         self.campos_mapeados_valores = campos_mapeados_valores;
-        
-        println!("campos mapeados valores__ {:?}", self.campos_mapeados_valores);
-        
-        
-        
+    
         //verificamos que la condicion where sea valida y los operandos sean validos
         self.condiciones = convertir_lower_case_restricciones(&self.condiciones, &self.campos_posibles);
         let mut validador_where = ValidadorSintaxis::new(&self.condiciones);
@@ -180,14 +144,6 @@ impl MetodosConsulta for ConsultaUpdate {
             validador_operandos_validos.validar()?;
         }
         Ok(())
-        
-        //tambien debo verificar que la clausula where sea valida, llamo a mi validador de where y operandos
-
-        //tambien debo tener un archivo nuevo donde voy escribiendo todo modificado y luego tiro el anterior archivo y
-        //renombro el nuevo archivo con el nombre del anterior
-
-        //tambien debo considerar que si no hay condicion where entonces debo actualizar todos los registros, es decir tirar todo
-        //y volver a escribir lo que estoy modificando
     }
 
     /// Procesa el contenido de la consulta y agrega los valores al archivo correspondiente.
@@ -215,13 +171,13 @@ impl MetodosConsulta for ConsultaUpdate {
             Err(_) => return Err(errores::Errores::Error), // Error al crear el archivo temporal
         };
         let mut escritor = BufWriter::new(archivo_temporal);
-
+        let mut modificados = 0;
         let mut arbol_exp = ArbolExpresiones::new();
         arbol_exp.crear_abe(&self.condiciones);
 
         if arbol_exp.arbol_vacio() {
             // Si el árbol de expresiones está vacío, sobrescribir el archivo con los campos y valores de campos_mapeados_valores
-            let mut nueva_linea: Vec<String> = vec!["".to_string(); self.campos_posibles.len()];
+            let mut nueva_linea: Vec<String> = vec![CARACTER_VACIO.to_string(); self.campos_posibles.len()];
             for (campo, valor) in &self.campos_mapeados_valores {
                 let mut valor_parseado = valor.to_string();
                 valor_parseado = remover_comillas(&valor_parseado);
@@ -229,7 +185,7 @@ impl MetodosConsulta for ConsultaUpdate {
                     nueva_linea[*indice] = valor_parseado;
                 }
             }
-            let linea_modificada = nueva_linea.join(",");
+            let linea_modificada = nueva_linea.join(COMA);
             writeln!(escritor, "{}", linea_modificada).map_err(|_| errores::Errores::Error)?; // Error al escribir la línea
         } else {
             for linea in lector.lines() {
@@ -246,14 +202,17 @@ impl MetodosConsulta for ConsultaUpdate {
                             campos[*indice] = valor_parseado;
                         }
                     }
+                    modificados += 1;
                 }
-                let linea_modificada = campos.join(",");
+                let linea_modificada = campos.join(COMA);
                 if writeln!(escritor, "{}", linea_modificada).is_err() {
                     Err(errores::Errores::Error)?; // Error al escribir la línea
                 }
             }
         }
-
+        if modificados == 0 {
+            Err(errores::Errores::Error)?;
+        }
         // Asegurarse de escribir en el archivo
         escritor.flush().map_err(|_| errores::Errores::Error)?; // Error al escribir
 
@@ -282,47 +241,11 @@ fn mapear_tipos_datos(columnas :&[String], columna1 :&[String])->HashMap<String,
     let mut campos_mapeados_tipos_de_datos: HashMap<String, String> = HashMap::new();
     for (indice,campo) in columna1.iter().enumerate(){
         match campo.chars().all(char::is_numeric){
-            true => campos_mapeados_tipos_de_datos.insert(columnas[indice].to_string(), "Integer".to_string()),
-            false => campos_mapeados_tipos_de_datos.insert(columnas[indice].to_string(), "String".to_string())
+            true => campos_mapeados_tipos_de_datos.insert(columnas[indice].to_string(), INTEGER.to_string()),
+            false => campos_mapeados_tipos_de_datos.insert(columnas[indice].to_string(), STRING.to_string())
             };
     }       
     campos_mapeados_tipos_de_datos
-}
-
-fn unir_literales_spliteados(consulta_spliteada: &Vec<String>) -> Vec<String> {
-    let mut valores: Vec<String> = Vec::new();
-    let mut literal: Vec<String> = Vec::new();
-    let mut parado_en_literal = false;
-
-    for campo in consulta_spliteada {
-        if campo.starts_with("'") && campo.ends_with("'") && campo.len() > 1 {
-            // Literal completo, lo agregamos directamente
-            valores.push(campo.to_string());
-        } else if campo.starts_with("'") && !parado_en_literal {
-            // Empieza un nuevo literal
-            literal.push(campo.to_string());
-            parado_en_literal = true;
-        } else if campo.ends_with("'") && parado_en_literal {
-            // Termina el literal actual
-            literal.push(campo.to_string());
-            valores.push(literal.join(" "));  // Une todo el literal
-            literal.clear();
-            parado_en_literal = false;
-        } else if parado_en_literal {
-            // Parte de un literal en proceso de unión
-            literal.push(campo.to_string());
-        } else {
-            // Campo normal que no es un literal
-            valores.push(campo.to_string());
-        }
-    }
-
-    // Si el literal no se cerró correctamente, lo agregamos igual
-    if !literal.is_empty() {
-        valores.push(literal.join(" "));
-    }
-
-    valores
 }
 
 fn verificar_sintaxis_campos_valores(campos_valores: &Vec<Vec<String>>) -> Result<(), errores::Errores> {
@@ -341,7 +264,7 @@ fn verificar_sintaxis_campos_valores(campos_valores: &Vec<Vec<String>>) -> Resul
             Err(errores::Errores::InvalidSyntax)?;
         }
         // Verificar que el segundo elemento sea '='
-        if operador != "=" {
+        if operador != IGUAL {
             Err(errores::Errores::InvalidSyntax)?;
         }
     }
@@ -360,32 +283,29 @@ fn verificar_campos_validos_y_valores_validos(
     // Cabe aclarar que valor puede ser un valor nulo.
     // Además, quiero que modifique los campos de campos_valores[0] a lowercase.
 
-    println!("campos posibles {:?}", campos_posibles);
-    println!("tipos de datos {:?}", tipos_datos);
-    println!("campos valores {:?}", vector_campos_valores);
-
     let mut vector_campos_valores_validados = Vec::new();
 
     for campos_valores in vector_campos_valores {
         let mut campos_valores_validados = campos_valores.clone();
         let campo = campos_valores_validados[0].to_lowercase();
         let valor = &campos_valores_validados[2];
-        println!("campo {:?}", campo);
         if valor.is_empty() {
+            if !campos_posibles.contains_key(&campo) {
+                Err(errores::Errores::InvalidColumn)?;
+            }
             {};
-        }else if campo.starts_with("'") && campo.ends_with("'") {
+        }else if campo.starts_with(COMILLA_SIMPLE) && campo.ends_with(COMILLA_SIMPLE) {
             return Err(errores::Errores::InvalidSyntax);
         }else if !campos_posibles.contains_key(&campo) {
-            println!("no esta en los campos posibles :  {:?}", campo);
             return Err(errores::Errores::InvalidColumn);
-        }else if valor.starts_with("'") && valor.ends_with("'") {
+        }else if valor.starts_with(COMILLA_SIMPLE) && valor.ends_with(COMILLA_SIMPLE) {
             if let Some(tipo) = tipos_datos.get(&campo) {
-                if tipo == "Integer" {
+                if tipo == INTEGER {
                     Err(errores::Errores::Error)?;
                 }
             }
         } else if let Some(tipo) = tipos_datos.get(&campo) {
-            if tipo == "String" {
+            if tipo == STRING {
                 Err(errores::Errores::Error)?;
             }
         }
@@ -397,62 +317,24 @@ fn verificar_campos_validos_y_valores_validos(
     Ok(vector_campos_valores_validados)
 }
 
-
-/*fn construir_vector_campos_comparador_igual_valores(valores: &Vec<String>) -> Vec<Vec<String>> {
-    let mut vector_terna: Vec<Vec<String>> = Vec::new();
-    let mut fila_campos_igual_valores: Vec<String> = Vec::new();
-    let mut ultimo:Option<String> = None;
-    println!("campos_y_valores_antes de  crear vector{:?}", valores);
-    for valor in valores {
-        match valor.as_str() {
-            "," => {
-                if ultimo == Some("=".to_string()) || ultimo == None {
-                    fila_campos_igual_valores.push(String::new()); // Campo vacío por coma
-                }
-                vector_terna.push(fila_campos_igual_valores.clone());
-                fila_campos_igual_valores.clear();
-            }
-            _ => {
-                // Agregar el valor si estamos dentro de paréntesis
-                fila_campos_igual_valores.push(valor.to_string());
-            }
-        }
-        ultimo = Some(valor.to_string());
-    }
-    if ultimo == Some(",".to_string()){
-        fila_campos_igual_valores.push(String::new()); // Campo vacío por coma
-        vector_terna.push(fila_campos_igual_valores);
-    }
-    //si quedo algo que no es una coma al final de la lista
-    else if !fila_campos_igual_valores.is_empty(){
-        vector_terna.push(fila_campos_igual_valores);
-    }
-
-    vector_terna
-}
-*/
 fn construir_vector_campos_comparador_igual_valores(valores: &Vec<String>) -> Vec<Vec<String>> {
     let mut vector_terna: Vec<Vec<String>> = Vec::new();
     let mut fila_campos_igual_valores: Vec<String> = Vec::new();
     let mut esperando_valor = false; // Indicador para saber si falta un valor después del '='
-
-    println!("campos_y_valores_antes de crear vector: {:?}", valores);
     
     for valor in valores {
         match valor.as_str() {
-            "=" => {
+            IGUAL => {
                 if fila_campos_igual_valores.len() == 1 {
-                    // Si tenemos un campo antes de "=", añadimos "=" y esperamos un valor
-                    fila_campos_igual_valores.push("=".to_string());
+                    // Si tenemos un campo antes de IGUAL, añadimos IGUAL y esperamos un valor
+                    fila_campos_igual_valores.push(IGUAL.to_string());
                     esperando_valor = true;
-                } else {
-                    println!("Error de sintaxis: '=' sin campo previo.");
                 }
             }
-            "," => {
+            COMA => {
                 if esperando_valor {
                     // Si estamos esperando un valor y viene una coma, significa que el valor está vacío
-                    fila_campos_igual_valores.push("".to_string());
+                    fila_campos_igual_valores.push(CARACTER_VACIO.to_string());
                     esperando_valor = false;
                 }
                 // Agregar la terna actual y limpiar
@@ -463,7 +345,7 @@ fn construir_vector_campos_comparador_igual_valores(valores: &Vec<String>) -> Ve
                 // Cualquier otro valor se añade a la terna actual
                 fila_campos_igual_valores.push(valor.to_string());
                 if esperando_valor {
-                    esperando_valor = false; // Ya recibimos el valor después del "="
+                    esperando_valor = false; // Ya recibimos el valor después del IGUAL
                 }
             }
         }
@@ -471,8 +353,8 @@ fn construir_vector_campos_comparador_igual_valores(valores: &Vec<String>) -> Ve
     
     // Si al final queda algún valor o terna sin procesar, lo añadimos
     if esperando_valor {
-        // Si quedó un "=" esperando un valor al final, agregamos un valor vacío
-        fila_campos_igual_valores.push("".to_string());
+        // Si quedó un IGUAL esperando un valor al final, agregamos un valor vacío
+        fila_campos_igual_valores.push(CARACTER_VACIO.to_string());
     }
     if !fila_campos_igual_valores.is_empty() {
         vector_terna.push(fila_campos_igual_valores);
@@ -491,12 +373,4 @@ fn mapear_campos_valores_terna(vector_valores: &Vec<Vec<String>>)->HashMap<Strin
         campos_mapeados_valores_fila.insert(campo.to_string(), valor.to_string());
     }
     campos_mapeados_valores_fila
-}
-
-fn remover_comillas(valor :&String)->String{
-    let mut valor_parseado = valor.to_string();
-    if valor_parseado.starts_with("'") && valor_parseado.ends_with("'") {
-        valor_parseado = valor_parseado[1..valor_parseado.len()-1].to_string();
-    }
-    valor_parseado
 }

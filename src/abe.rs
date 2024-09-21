@@ -1,5 +1,17 @@
 use std::vec::Vec;
 use std::collections::HashMap;
+
+const IGUAL: &str = "=";
+const MAYOR: &str = ">";
+const MENOR: &str = "<";
+const AND: &str = "and";
+const NOT: &str = "not";
+const OR: &str = "or";
+const PARENTESIS_APERTURA: &str = "(";
+const PARENTESIS_CIERRE: &str = ")";
+const CARACTER_VACIO: &str = "";
+const COMILLA_SIMPLE: &str = "'";
+
 #[derive(Debug, PartialEq, PartialOrd)]
 enum TiposDatos {
     Entero(i32),
@@ -36,11 +48,7 @@ impl ArbolExpresiones {
     pub fn arbol_vacio(&self) -> bool {
         self.raiz.is_none()
     }
-    /*
-    fn reinicializar(&mut self) {
-        self.raiz = None;
-    }*/
-
+    
     fn crear_sub_arbol(
         &self,
         operando2: Box<NodoArbolExpresiones>,
@@ -65,16 +73,16 @@ impl ArbolExpresiones {
 
     fn prioridad(&self, caracter: &str) -> u8 {
         match caracter {
-            "=" | ">" | "<" => 4,
-            "not" => 3,
-            "and" => 2,
-            "or" => 1,
+            IGUAL | MAYOR | MENOR => 4,
+            NOT => 3,
+            AND => 2,
+            OR => 1,
             _ => 0,
         }
     }
 
     fn es_operador(&self, caracter: &str) -> bool {
-        matches!(caracter, "(" | ")" | "=" | ">" | "<" | "not" | "and" | "or")
+        matches!(caracter, PARENTESIS_APERTURA | PARENTESIS_CIERRE | IGUAL | MAYOR | MENOR | NOT | AND | OR)
     }
 
     pub fn crear_abe(&mut self, palabras: &Vec<String>) {
@@ -87,9 +95,9 @@ impl ArbolExpresiones {
 
             if !self.es_operador(palabra) {
                 pila_operandos.push(token);
-            } else if palabra == "(" { 
+            } else if palabra == PARENTESIS_APERTURA { 
                 pila_operadores.push(token);
-                } else if palabra == ")" {
+                } else if palabra == PARENTESIS_CIERRE {
                     let mut tope = match pila_operadores.last() {
                         Some(tope) => tope,
                         None => break,
@@ -98,8 +106,8 @@ impl ArbolExpresiones {
                         Some(dato) => dato,
                         None => break,                        
                     };
-                    while !pila_operadores.is_empty() && dato != "(" {
-                        if dato == "not" {
+                    while !pila_operadores.is_empty() && dato != PARENTESIS_APERTURA {
+                        if dato == NOT {
                             let (operando, operador) = match (pila_operandos.pop(), pila_operadores.pop()) {
                                 (Some(operando), Some(operador)) => (operando, operador),
                                 _ => break,
@@ -139,7 +147,7 @@ impl ArbolExpresiones {
                         None => break,
                     };
                     while !pila_operadores.is_empty() && self.prioridad(palabra) <= self.prioridad(dato){
-                        if dato == "not" {
+                        if dato == NOT {
                             let (operando, operador) = match(pila_operandos.pop(),pila_operadores.pop()){
                                 (Some(operando), Some(operador)) => (operando, operador),
                                 _ => break,
@@ -180,7 +188,7 @@ impl ArbolExpresiones {
                 Some(dato) => dato,
                 None => break,
             };
-            if dato == "not" {
+            if dato == NOT {
                 let (operando, operador) = match(pila_operandos.pop(),pila_operadores.pop()){
                     (Some(operando), Some(operador)) => (operando, operador),
                     _ => break,
@@ -213,85 +221,61 @@ impl ArbolExpresiones {
         false
     }
 
-    fn evalua_expresion(&self, sub_arbol: &NodoArbolExpresiones, campos_mapeados: &HashMap<String, usize>, campos_fila_actual: &[String]) -> (TiposDatos,bool) {
-        let mut caracter = match &sub_arbol.dato {
-            Some(dato) => dato.clone(),
-            None => return (TiposDatos::String("".to_string()), false)//No hay nodo
-        };
+    fn evalua_expresion(&self, sub_arbol: &NodoArbolExpresiones, campos_mapeados: &HashMap<String, usize>, campos_fila_actual: &[String]) -> (TiposDatos, bool) {
+    let mut caracter = match &sub_arbol.dato {
+        Some(dato) => dato.to_string(),
+        None => return (TiposDatos::String(CARACTER_VACIO.to_string()), false), // No hay nodo
+    };
 
-        if !self.es_operador(&caracter) {
-            // Ver si podemos parsear a int o string
-            if es_cadena_literal(&caracter) {
-                remover_comillas_simples(&mut caracter);
-                return (TiposDatos::String(caracter.to_string()), false); // Aquí devolveríamos la cadena sin las comillas simples
-            }
-            if let Ok(numero) = caracter.parse::<i32>() {
+    if !self.es_operador(&caracter) {
+        // Ver si podemos parsear a int o string
+        if es_cadena_literal(&caracter) {
+            remover_comillas_simples(&mut caracter);
+            return (TiposDatos::String(caracter.to_string()), false); // Aquí devolveríamos la cadena sin las comillas simples
+        }
+        if let Ok(numero) = caracter.parse::<i32>() {
+            return (TiposDatos::Entero(numero), false);
+        }
+        // Buscar en los campos mapeados
+        if let Some(&indice) = campos_mapeados.get(&caracter) {
+            let valor = &campos_fila_actual[indice];
+            if let Ok(numero) = valor.parse::<i32>() {
                 return (TiposDatos::Entero(numero), false);
             }
-            // Buscar en los campos mapeados
-            if let Some(&indice) = campos_mapeados.get(&caracter) {
-                let valor = &campos_fila_actual[indice];
-                if let Ok(numero) = valor.parse::<i32>() {
-                    return (TiposDatos::Entero(numero), false);
-                }  
-                return (TiposDatos::String(valor.to_string()), false);
-            }
-        } else if caracter == "not" {
-            let (dato_izq, booleano_izq) = self.evalua_expresion(sub_arbol.izquierdo.as_ref().unwrap(), campos_mapeados, campos_fila_actual);
-            return (dato_izq, !booleano_izq);
-        } else if caracter == "=" {
-            let (dato_izq, _) = self.evalua_expresion(sub_arbol.izquierdo.as_ref().unwrap(), campos_mapeados, campos_fila_actual);
-            let (dato_der , _) = self.evalua_expresion(sub_arbol.derecho.as_ref().unwrap(), campos_mapeados, campos_fila_actual);
-            if dato_izq == dato_der{
-                return (TiposDatos::String("".to_string()), true);
-            }
-            else{
-                return (TiposDatos::String("".to_string()), false);
-            }
-        } else if caracter == ">" {
-            let (dato_izq, _) = self.evalua_expresion(sub_arbol.izquierdo.as_ref().unwrap(), campos_mapeados, campos_fila_actual);
-            let (dato_der , _) = self.evalua_expresion(sub_arbol.derecho.as_ref().unwrap(), campos_mapeados, campos_fila_actual);
-            if dato_izq > dato_der{
-                return (TiposDatos::String("".to_string()), true);
-            }
-            else{
-                return (TiposDatos::String("".to_string()), false);
-            }
-        } else if caracter == "<" {
-            let (dato_izq, _) = self.evalua_expresion(sub_arbol.izquierdo.as_ref().unwrap(), campos_mapeados, campos_fila_actual);
-            let (dato_der , _) = self.evalua_expresion(sub_arbol.derecho.as_ref().unwrap(), campos_mapeados, campos_fila_actual);
-            if dato_izq < dato_der{
-                return (TiposDatos::String("".to_string()), true);
-            }
-            else{
-                return (TiposDatos::String("".to_string()), false);
-            }
-        } else if caracter == "and" {
-            let (_, booleano_izq) = self.evalua_expresion(sub_arbol.izquierdo.as_ref().unwrap(), campos_mapeados, campos_fila_actual);
-            let (_ , booleano_der) = self.evalua_expresion(sub_arbol.derecho.as_ref().unwrap(), campos_mapeados, campos_fila_actual);
-            if booleano_izq && booleano_der{
-                return (TiposDatos::String("".to_string()), true);
-            }
-            else{
-                return (TiposDatos::String("".to_string()), false);
-            }
-        } else if caracter == "or" {
-            let (_, booleano_izq) = self.evalua_expresion(sub_arbol.izquierdo.as_ref().unwrap(), campos_mapeados, campos_fila_actual);
-            let (_ , booleano_der) = self.evalua_expresion(sub_arbol.derecho.as_ref().unwrap(), campos_mapeados, campos_fila_actual);
-            if booleano_izq || booleano_der{
-                return (TiposDatos::String("".to_string()), true);
-            }
-            else{
-                return (TiposDatos::String("".to_string()), false);
-            }
+            return (TiposDatos::String(valor.to_string()), false);
         }
-
-        (TiposDatos::String("".to_string()), false)
+    } else {
+        return self.evalua_operador(&caracter, sub_arbol, campos_mapeados, campos_fila_actual);
     }
+
+    (TiposDatos::String("".to_string()), false)
+}
+
+fn evalua_operador(&self, operador: &str, sub_arbol: &NodoArbolExpresiones, campos_mapeados: &HashMap<String, usize>, campos_fila_actual: &[String]) -> (TiposDatos, bool) {
+    let (dato_izq, booleano_izq) = match sub_arbol.izquierdo.as_ref() {
+        Some(izquierdo) => self.evalua_expresion(izquierdo, campos_mapeados, campos_fila_actual),
+        None => return (TiposDatos::String(CARACTER_VACIO.to_string()), true), // Manejo del caso None
+    };
+
+    let (dato_der, booleano_der) = match sub_arbol.derecho.as_ref() {
+        Some(derecho) => self.evalua_expresion(derecho, campos_mapeados, campos_fila_actual),
+        None => return (TiposDatos::String(CARACTER_VACIO.to_string()), true), // Manejo del caso None
+    };
+
+    match operador {
+        NOT => (dato_izq, !booleano_izq),
+        IGUAL => (TiposDatos::String(CARACTER_VACIO.to_string()), dato_izq == dato_der),
+        MAYOR => (TiposDatos::String(CARACTER_VACIO.to_string()), dato_izq > dato_der),
+        MENOR => (TiposDatos::String(CARACTER_VACIO.to_string()), dato_izq < dato_der),
+        AND => (TiposDatos::String(CARACTER_VACIO.to_string()), booleano_izq && booleano_der),
+        OR => (TiposDatos::String(CARACTER_VACIO.to_string()), booleano_izq || booleano_der),
+        _ => (TiposDatos::String(CARACTER_VACIO.to_string()), false), // Operador no reconocido
+    }
+}
 
 }
 fn es_cadena_literal(operando: &str) -> bool {
-    operando.starts_with("'") && operando.ends_with("'")  // Aquí puedes definir tu lógica de cadena literal
+    operando.starts_with(COMILLA_SIMPLE) && operando.ends_with(COMILLA_SIMPLE) 
 }
 
 fn remover_comillas_simples(cadena : &mut String){

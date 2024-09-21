@@ -4,15 +4,28 @@ use crate::verificaciones_sintaxis::verificar_orden_keywords;
 use std::collections::HashSet;
 use crate::select::{eliminar_comas, verificar_sintaxis_campos};
 use crate::select::ConsultaSelect;
- 
 use crate::errores;
-use crate::parseos::parseo;
+use crate::parseos::{parseo, remover_comillas};
 use std::fs::OpenOptions;
 use std::path::Path;
 use std::{
     collections::HashMap,
     io::{BufRead, BufWriter, Write},
 };
+
+const CARACTERES_DELIMITADORES: &[char] = &['(', ')', ',',';'];
+const INSERT: &str = "insert";
+const INTO: &str = "into";
+const VALUES: &str = "values";
+const PARENTESIS_ABIERTO: &str = "(";
+const PARENTESIS_CERRADO: &str = ")";
+const CARACTER_VACIO: &str = "";
+const PUNTO_COMA: &str = ";";
+const COMA: &str = ",";
+const COMILLA_SIMPLE: &str = "'";
+const INTEGER: &str = "Integer";
+const STRING: &str = "String";
+const ESPACIO: &str = " ";
 
 /// Representa una consulta SQL de inserción.
 ///
@@ -57,17 +70,15 @@ impl ConsultaInsert {
     /// Una instancia de `ConsultaInsert`
 
     pub fn crear(consulta: &Vec<String>, ruta_a_tablas: &String) -> Result<ConsultaInsert,errores::Errores> {
-        let palabras_reservadas = vec!["insert", "into", "values"];  
+        let palabras_reservadas = vec![INSERT, INTO, VALUES];  
         verificar_orden_keywords(consulta, palabras_reservadas)?;
-        let mut caracteres_delimitadores = vec!['(', ')', ','];
-        let consulta_spliteada = &parseo(consulta, &caracteres_delimitadores);
+        let consulta_spliteada = &parseo(consulta, CARACTERES_DELIMITADORES);
         let consulta_spliteada = &unir_literales_spliteados(consulta_spliteada);
-        let tabla = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from("insert"),String::from("into")], HashSet::from(["(".to_string()]), caracteres_delimitadores, false,false)?;        
-        caracteres_delimitadores = vec![','];
-        let campos_consulta = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from("(")], HashSet::from([")".to_string()]), caracteres_delimitadores, true, false)?;
+        let tabla = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from(INSERT),String::from(INTO)], HashSet::from([PARENTESIS_ABIERTO.to_string()]), false,false)?;        
+        let campos_consulta = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from(PARENTESIS_ABIERTO)], HashSet::from([PARENTESIS_CERRADO.to_string()]), true, false)?;
         let campos_posibles: HashMap<String, usize> = HashMap::new();
         let ruta_tabla = ruta_a_tablas.to_string(); 
-        let valores: Vec<String> = Self::parsear_cualquier_cosa(consulta, vec![String::from("values")], HashSet::from(["".to_string()]), vec![','], false, false)?;
+        let valores: Vec<String> = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from(VALUES)], HashSet::from([CARACTER_VACIO.to_string(),PUNTO_COMA.to_string()]), false, false)?;
         let campos_mapeados_valores: Vec<HashMap<String,String>> = Vec::new();
         Ok(ConsultaInsert {
             campos_consulta,
@@ -81,31 +92,6 @@ impl ConsultaInsert {
 }
 
 impl Parseables for ConsultaInsert {
-    /* fn parsear_valores(_consulta: &Vec<String>, _index: &mut usize) -> Vec<Vec<String>> {
-        let mut lista_valores: Vec<Vec<String>> = Vec::new();
-        if _consulta[*_index] == ")" {
-            *_index += 1;
-        }
-        if _consulta[*_index] == "values" {
-            *_index += 1;
-        }
-
-        while *_index < _consulta.len() {
-            if _consulta[*_index] == "(" {
-                *_index += 1;
-            }
-            let mut valores = Vec::new();
-            while *_index < _consulta.len() && _consulta[*_index] != ")" {
-                let valor = &_consulta[*_index];
-
-                valores.push(valor.to_string());
-                *_index += 1;
-            }
-            lista_valores.push(valores);
-            *_index += 1;
-        }
-        lista_valores
-    } */
 }
 
 impl MetodosConsulta for ConsultaInsert {
@@ -123,48 +109,25 @@ impl MetodosConsulta for ConsultaInsert {
         self.ruta_tabla = procesar_ruta(&self.ruta_tabla, &self.tabla[0]);
         let mut lector = leer_archivo(&self.ruta_tabla).map_err(|_| errores::Errores::InvalidTable)?;
         let mut nombres_campos = String::new();
-        lector.read_line(&mut nombres_campos).map_err(|_| errores::Errores::Error)?;
-        
+        lector.read_line(&mut nombres_campos).map_err(|_| errores::Errores::Error)?;        
         let (_, campos_validos) = parsear_linea_archivo(&nombres_campos);
         self.campos_posibles = mapear_campos(&campos_validos);                
-        
-
-
-        /////7777
         let mut tipos_datos = String::new();
         lector.read_line(&mut tipos_datos).map_err(|_| errores::Errores::Error)?;
         let (_,tipos_datos) = parsear_linea_archivo(&tipos_datos);
-        println!("linea parseada {:?}",tipos_datos);
         let tipos_datos = mapear_tipos_datos(&campos_validos,&tipos_datos);
-        ////77777
-                        
-        
         verificar_sintaxis_campos(&self.campos_consulta)?;
         self.campos_consulta = eliminar_comas(&self.campos_consulta);
         if !ConsultaSelect::verificar_campos_validos(&self.campos_posibles, &mut self.campos_consulta) {
             Err(errores::Errores::InvalidColumn)?;
         }
-        println!("campos valores literales {:?}", self.valores);
-        println!("campos {:?}", self.campos_consulta);
         self.valores = unir_literales_spliteados(&self.valores);
-        println!("valores_antes_verificar_sintaxis{:?}",self.valores);
         verificar_sintaxis_valores(&self.valores)?;
-        println!("valores {:?}", self.valores);
         let vector_valores = construir_vector_valores(&self.valores);
-        println!("vector_valores_construido_con_vacios{:?}",vector_valores);
-        //let vector_valores = rellenar_valores_vacios_entre_comas_de_cada_filas(&vector_valores);
         verificar_cantidad_valores_validos(&vector_valores, &self.campos_consulta)?;
-        println!("vector_valores{:?}",vector_valores);
-        println!("{:?}",tipos_datos);
         let campos_mapeados_valores = mapear_campos_valores(&vector_valores, &self.campos_consulta);
-
-        println!("campos mapeados valores____{:?}", campos_mapeados_valores);
         verificar_valores_tipo_valido(&campos_mapeados_valores, &tipos_datos)?;
         self.campos_mapeados_valores = campos_mapeados_valores;
-
-        println!("campos mapeados valores {:?}", self.campos_mapeados_valores);
-        println!("campos mapeados tipos de datos {:?}", tipos_datos);
-        println!("campos consulta {:?}", self.campos_consulta);
         Ok(())
     }
 
@@ -193,18 +156,12 @@ impl MetodosConsulta for ConsultaInsert {
             for campo in campos_tabla {
                 let valor = match valores_fila.get(campo) {
                     Some(valor) => valor,
-                    None => &"".to_string(),  //si no esta ingreso una cadena vacia                    
+                    None => &CARACTER_VACIO.to_string(),  //si no esta ingreso una cadena vacia                    
                 };
-                if valor.starts_with("'") && valor.ends_with("'") {
-                    let mut valor_str = valor.clone();
-                    valor_str.remove(0);
-                    valor_str.pop();
-                    linea.push(valor_str);
-                } else {
-                    linea.push(valor.to_string());
-                } 
+                let valor = remover_comillas(valor);
+                linea.push(valor.to_string());
             }
-            let linea = linea.join(",");
+            let linea = linea.join(COMA);
             if writeln!(escritor, "{}", linea).is_err() {
                 Err(errores::Errores::Error)?;
             }
@@ -233,20 +190,17 @@ impl Verificaciones for ConsultaInsert {
 }
 
 fn verificar_valores_tipo_valido(campos_mapeados_valores: &Vec<HashMap<String,String>>, tipos_datos: &HashMap<String,String>)->Result<(),errores::Errores>{
-    println!("los tipos de datos disponibles son{:?}",tipos_datos);
     for campos_mapeados in campos_mapeados_valores {
         for (campo, valor) in campos_mapeados {
-            println!("campo {} valor {}", campo, valor);
             if valor.is_empty(){
                 continue;
             }
             match tipos_datos.get(campo) {
                 Some(tipo) => {
-                    println!("{}",tipo);
-                    if tipo == "Integer" && valor.parse::<i32>().is_err() {
+                    if tipo == INTEGER && valor.parse::<i32>().is_err() {
                         Err(errores::Errores::Error)?;
                     }
-                    if tipo == "String" && (!valor.starts_with("'") && !valor.ends_with("'") ){
+                    if tipo == STRING && (!valor.starts_with(COMILLA_SIMPLE) && !valor.ends_with(COMILLA_SIMPLE) ){
                         Err(errores::Errores::Error)?;
                     }
                 }
@@ -273,8 +227,8 @@ fn mapear_tipos_datos(columnas :&[String], columna1 :&[String])->HashMap<String,
     let mut campos_mapeados_tipos_de_datos: HashMap<String, String> = HashMap::new();
     for (indice, campo) in columna1.iter().enumerate(){
         match campo.chars().all(char::is_numeric){
-            true => campos_mapeados_tipos_de_datos.insert(columnas[indice].to_string(), "Integer".to_string()),
-            false => campos_mapeados_tipos_de_datos.insert(columnas[indice].to_string(), "String".to_string())
+            true => campos_mapeados_tipos_de_datos.insert(columnas[indice].to_string(), INTEGER.to_string()),
+            false => campos_mapeados_tipos_de_datos.insert(columnas[indice].to_string(), STRING.to_string())
             };
     }       
     campos_mapeados_tipos_de_datos
@@ -286,17 +240,17 @@ fn unir_literales_spliteados(consulta_spliteada: &Vec<String>) -> Vec<String> {
     let mut parado_en_literal = false;
 
     for campo in consulta_spliteada {
-        if campo.starts_with("'") && campo.ends_with("'") && campo.len() > 1 {
+        if campo.starts_with(COMILLA_SIMPLE) && campo.ends_with(COMILLA_SIMPLE) && campo.len() > 1 {
             // Literal completo, lo agregamos directamente
             valores.push(campo.to_string());
-        } else if campo.starts_with("'") && !parado_en_literal {
+        } else if campo.starts_with(COMILLA_SIMPLE) && !parado_en_literal {
             // Empieza un nuevo literal
             literal.push(campo.to_string());
             parado_en_literal = true;
-        } else if campo.ends_with("'") && parado_en_literal {
+        } else if campo.ends_with(COMILLA_SIMPLE) && parado_en_literal {
             // Termina el literal actual
             literal.push(campo.to_string());
-            valores.push(literal.join(" "));  // Une todo el literal
+            valores.push(literal.join(ESPACIO));  // Une todo el literal
             literal.clear();
             parado_en_literal = false;
         } else if parado_en_literal {
@@ -310,7 +264,7 @@ fn unir_literales_spliteados(consulta_spliteada: &Vec<String>) -> Vec<String> {
 
     // Si el literal no se cerró correctamente, lo agregamos igual
     if !literal.is_empty() {
-        valores.push(literal.join(" "));
+        valores.push(literal.join(ESPACIO));
     }
 
     valores
@@ -352,23 +306,23 @@ fn construir_vector_valores(valores: &Vec<String>) -> Vec<Vec<String>> {
     let mut ultimo:Option<String> = None;
     for valor in valores {
         match valor.as_str() {
-            "(" => {
+            PARENTESIS_ABIERTO => {
                 // Iniciar una nueva fila
                 parentesis_abierto = true;
                 fila_valores.clear(); // Limpiar la fila al iniciar
             }
-            ")" => {
+            PARENTESIS_CERRADO => {
                 // Finalizar la fila actual solo si hay valores en ella
-                if ultimo == Some(",".to_string()){
+                if ultimo == Some(COMA.to_string()){
                     fila_valores.push(String::new()); // Campo vacío por coma
                 }
                 vector_valores.push(fila_valores.clone());
                 fila_valores.clear();
                 parentesis_abierto = false;
             }
-            "," => {
+            COMA => {
                 // Agregar un campo vacío solo si estamos dentro de paréntesis
-                if parentesis_abierto && ultimo == Some("(".to_string()) || ultimo == Some(",".to_string()) {
+                if parentesis_abierto && ultimo == Some(PARENTESIS_ABIERTO.to_string()) || ultimo == Some(COMA.to_string()) {
                     fila_valores.push(String::new()); // Campo vacío por coma
                 }
             }

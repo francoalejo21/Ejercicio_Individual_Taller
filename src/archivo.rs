@@ -1,5 +1,8 @@
 use std::fs::File;
 use std::io::{self, BufReader};
+
+const BARRA: &char = &'/';
+const COMA: &str = ",";
 /// Procesa la ruta para acceder a una tabla específica, agregando el nombre de la tabla a la ruta.
 ///
 /// Este método modifica la ruta original añadiendo una barra y el nombre de la tabla en minúsculas.
@@ -14,8 +17,9 @@ use std::io::{self, BufReader};
 pub fn procesar_ruta(ruta: &str, tabla: &str) -> String {
     let mut ruta_modificada = String::new(); // Crear un nuevo String
     ruta_modificada.push_str(ruta); // Agregar la ruta original (sin clonar)
-    ruta_modificada.push('/'); // Modificar
+    ruta_modificada.push(*BARRA); // Modificar
     ruta_modificada.push_str(tabla); // Modificar
+    ruta_modificada.push_str(".csv");
     ruta_modificada
 }
 
@@ -48,11 +52,11 @@ pub fn leer_archivo(ruta_archivo: &str) -> Result<BufReader<File>, io::Error> {
 
 pub fn parsear_linea_archivo(linea: &str) -> (Vec<String>, Vec<String>) {
     return (
-        linea.trim().split(",").map(|s| s.to_string()).collect(),
+        linea.trim().split(COMA).map(|s| s.to_string()).collect(),
         linea
             .trim()
             .to_lowercase()
-            .split(",")
+            .split(COMA)
             .map(|s| s.to_string())
             .collect(),
     );

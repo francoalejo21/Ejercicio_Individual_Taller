@@ -9,13 +9,20 @@ use std::fs;
 use std::io::BufReader;
 use crate::abe::ArbolExpresiones;
 use crate::errores;
-use crate::parseos::parseo;
+use crate::parseos::{parseo,unir_literales_spliteados};
 use std::fs::File;
 use std::path::Path;
 use std::{
     collections::HashMap,
     io::{BufRead, BufWriter, Write},
 };
+
+const CARACTERES_DELIMITADORES: &[char] = &[';',',','=','<','>','(',')'];
+const DELETE: &str = "delete";
+const FROM: &str = "from";
+const WHERE: &str = "where";
+const CARACTER_VACIO: &str = "";
+const PUNTO_COMA: &str = ";";
 
 /// Representa una consulta SQL de inserción.
 ///
@@ -55,23 +62,17 @@ impl ConsultaDelete {
     /// - `ruta`: La ruta del archivo en el que se van a insertar los datos.
     ///
     /// # Retorno
-    /// Una instancia de `ConsultaInsert`
+    /// Una instancia de `ConsultaDelete` si la consulta es válida, o un error de tipo `Errores`.
 
     pub fn crear(consulta: &Vec<String>, ruta_a_tablas: &String) -> Result<ConsultaDelete,errores::Errores> {
-        let palabras_reservadas = vec!["delete", "from", "where"];  
+        let palabras_reservadas = vec![DELETE, FROM, WHERE];  
         verificar_orden_keywords(consulta, palabras_reservadas)?;
-        let mut caracteres_delimitadores = vec!['=',','];
-        let consulta_spliteada = &parseo(consulta, &caracteres_delimitadores);
+        let consulta_spliteada = &parseo(consulta, CARACTERES_DELIMITADORES);
         let consulta_spliteada = &unir_literales_spliteados(consulta_spliteada);
-        let tabla = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from("delete"), String::from("from")], HashSet::from(["where".to_string(), "".to_string()]), caracteres_delimitadores, false, false)?;        
-        println!("tabla {:?}", tabla);
+        let tabla = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from(DELETE), String::from(FROM)], HashSet::from([WHERE.to_string(), CARACTER_VACIO.to_string(), PUNTO_COMA.to_string()]), false, false)?;        
         let campos_posibles: HashMap<String, usize> = HashMap::new();
         let ruta_tabla = ruta_a_tablas.to_string(); 
-        caracteres_delimitadores = vec!['=','<','>','(',')'];
-        println!("{:?}" ,consulta_spliteada);
-        let condiciones: Vec<String> = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from("where")], HashSet::from(["".to_string()]), caracteres_delimitadores, false, true)?;
-        println!("condiciones {:?}", condiciones);
-        println!("Pude crea consulta delete");
+        let condiciones: Vec<String> = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from(WHERE)], HashSet::from([CARACTER_VACIO.to_string(),PUNTO_COMA.to_string()]), false, true)?;
         Ok(ConsultaDelete {
             campos_posibles,
             tabla,
@@ -117,14 +118,6 @@ impl MetodosConsulta for ConsultaDelete {
             validador_operandos_validos.validar()?;
         }
         Ok(())
-        
-        //tambien debo verificar que la clausula where sea valida, llamo a mi validador de where y operandos
-
-        //tambien debo tener un archivo nuevo donde voy escribiendo todo modificado y luego tiro el anterior archivo y
-        //renombro el nuevo archivo con el nombre del anterior
-
-        //tambien debo considerar que si no hay condicion where entonces debo actualizar todos los registros, es decir tirar todo
-        //y volver a escribir lo que estoy modificando
     }
 
     /// Procesa el contenido de la consulta y agrega los valores al archivo correspondiente.
@@ -146,12 +139,9 @@ impl MetodosConsulta for ConsultaDelete {
         let ruta_temporal = ruta_archivo.with_extension("tmp");
         let archivo_temporal = File::create(&ruta_temporal).map_err(|_| errores::Errores::Error)?;
         let mut escritor = BufWriter::new(archivo_temporal);
-
+        let mut eliminados = 0;
         let mut arbol_exp = ArbolExpresiones::new();
         arbol_exp.crear_abe(&self.condiciones);
-        println!("arbol de expresiones {:?}", arbol_exp);
-        println!("campos posibles de la consulta{:?}", self.campos_posibles);
-        println!("condiciones de la consulta{:?}", self.condiciones);
 
         for linea in lector.lines() {
             let linea = linea.map_err(|_| errores::Errores::Error)?;
@@ -159,27 +149,23 @@ impl MetodosConsulta for ConsultaDelete {
 
             // Si no hay condiciones, eliminar todas las líneas
             if arbol_exp.arbol_vacio() {
-                println!("arbol_vacio");
                 continue;
             }
 
             // Verificar si la línea cumple con las condiciones WHERE
             if arbol_exp.evalua(&self.campos_posibles, &campos) {
                 // La línea cumple con las condiciones, no escribirla en el archivo temporal
-                println!("{:?}", self.campos_posibles);
-                println!("Eliminando línea en forma debugeada: {:?}", campos);
-                println!("Eliminando línea: {}", linea);
+                eliminados+=1;
             } else {
                 // La línea no cumple con las condiciones, escribirla en el archivo temporal
-                print!("Escribiendo línea en forma debugeada: {:?}", linea);
-                println!("Escribiendo línea: {}", linea);
                 writeln!(escritor, "{}", linea).map_err(|_| errores::Errores::Error)?;
-
-                // Asegurarse de escribir en el archivo
-                escritor.flush().map_err(|_| errores::Errores::Error)?;
             }
         }
-
+        if eliminados == 0 {
+            Err(errores::Errores::Error)?;
+        }
+        // Asegurarse de escribir en el archivo
+        escritor.flush().map_err(|_| errores::Errores::Error)?;
         // Reemplazar el archivo original con el archivo temporal
         fs::rename(ruta_temporal, ruta_archivo).map_err(|_| errores::Errores::Error)?;
 
@@ -199,39 +185,4 @@ impl Verificaciones for ConsultaDelete {
         }
         true
     }
-}
-fn unir_literales_spliteados(consulta_spliteada: &Vec<String>) -> Vec<String> {
-    let mut valores: Vec<String> = Vec::new();
-    let mut literal: Vec<String> = Vec::new();
-    let mut parado_en_literal = false;
-
-    for campo in consulta_spliteada {
-        if campo.starts_with("'") && campo.ends_with("'") && campo.len() > 1 {
-            // Literal completo, lo agregamos directamente
-            valores.push(campo.to_string());
-        } else if campo.starts_with("'") && !parado_en_literal {
-            // Empieza un nuevo literal
-            literal.push(campo.to_string());
-            parado_en_literal = true;
-        } else if campo.ends_with("'") && parado_en_literal {
-            // Termina el literal actual
-            literal.push(campo.to_string());
-            valores.push(literal.join(" "));  // Une todo el literal
-            literal.clear();
-            parado_en_literal = false;
-        } else if parado_en_literal {
-            // Parte de un literal en proceso de unión
-            literal.push(campo.to_string());
-        } else {
-            // Campo normal que no es un literal
-            valores.push(campo.to_string());
-        }
-    }
-
-    // Si el literal no se cerró correctamente, lo agregamos igual
-    if !literal.is_empty() {
-        valores.push(literal.join(" "));
-    }
-
-    valores
 }

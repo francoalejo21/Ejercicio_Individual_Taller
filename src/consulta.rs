@@ -1,16 +1,20 @@
-use crate::{errores, parseos::parseo};
+use crate::errores;
 use crate::insert::ConsultaInsert;
 use crate::select::ConsultaSelect;
 use std::collections::{HashMap, HashSet};
 use crate::update::ConsultaUpdate;
 use crate::delete::ConsultaDelete;
 
+const SELECT: &str = "select";
+const INSERT: &str = "insert";
+const DELETE: &str = "delete";
+const UPDATE: &str = "update";
+const CARACTER_VACIO: &str = "";
 pub trait Parseables {
     fn parsear_cualquier_cosa(
         consulta: &[String], 
         keywords_inicio: Vec<String>, 
         keyword_final: HashSet<String>, 
-        caracteres_delimitadores: Vec<char>, 
         parseo_lower: bool,
         opcional: bool, // Nuevo parámetro para indicar si las palabras clave de inicio son opcionales
     ) -> Result<Vec<String>, errores::Errores> {
@@ -36,10 +40,9 @@ pub trait Parseables {
         if campos.is_empty() {
             return Err(errores::Errores::InvalidSyntax);
         }
-    
-        let campos_parseados = parseo(&campos, &caracteres_delimitadores);
-        if keyword_final.contains("") || keyword_final_encontrada {
-            Ok(campos_parseados)
+        
+        if keyword_final.contains(CARACTER_VACIO) || keyword_final_encontrada {
+            Ok(campos)
         } else {
             Err(errores::Errores::InvalidSyntax)
         }
@@ -114,25 +117,22 @@ impl SQLConsulta {
         if consulta_limpia.len() < 2{
             Err(errores::Errores::InvalidSyntax)?
         }
-        let consultas = ["select", "insert", "into","delete", "from", "update"];
+
         // Usamos match para decidir el tipo de consulta
-        match &consulta_limpia[0].to_lowercase() {
-            tipo_consulta if tipo_consulta == consultas[0]   => {
-                Ok(SQLConsulta::Select(
+        match consulta_limpia[0].to_lowercase().as_str() {
+            SELECT => Ok(SQLConsulta::Select(
                 ConsultaSelect::crear(&consulta_limpia, ruta_tablas)?,
-                ))},                
-            tipo_consulta if tipo_consulta == consultas[1] => match &consulta_limpia[1].to_lowercase(){
-                tipo_consulta if tipo_consulta == consultas[2] => 
-                Ok(SQLConsulta::Insert(ConsultaInsert::crear(&consulta_limpia, ruta_tablas)?)),
-                _ => Err(errores::Errores::InvalidSyntax)?},
-            tipo_consulta if tipo_consulta == consultas[5] =>{
-                Ok(SQLConsulta::Update(ConsultaUpdate::crear(&consulta_limpia, ruta_tablas)?))},
-            tipo_consulta if tipo_consulta == consultas[3] =>{
-                Ok(SQLConsulta::Delete(ConsultaDelete::crear(&consulta_limpia, ruta_tablas)?))},
-            _=> {
-                // En caso de que no coincida con ninguna consulta soportada, retornamos un error
-                Err(errores::Errores::InvalidSyntax)?
-            }
+            )),
+            INSERT => Ok(SQLConsulta::Insert(
+                ConsultaInsert::crear(&consulta_limpia, ruta_tablas)?,
+            )),
+            UPDATE => Ok(SQLConsulta::Update(
+                ConsultaUpdate::crear(&consulta_limpia, ruta_tablas)?,
+            )),
+            DELETE => Ok(SQLConsulta::Delete(
+                ConsultaDelete::crear(&consulta_limpia, ruta_tablas)?,
+            )),
+            _ => Err(errores::Errores::InvalidSyntax),
         }
     }
 
@@ -204,7 +204,7 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    #[test]
+     #[test]
     fn test_mapear_campos() {
         let campos = vec!["id".to_string(), "nombre".to_string(), "edad".to_string()];
         let resultado = mapear_campos(&campos);
@@ -251,7 +251,7 @@ mod tests {
 
         assert!(resultado.is_ok());
         match resultado.unwrap() {
-            //SQLConsulta::Insert(_) => assert!(true),
+            SQLConsulta::Insert(_) => assert!(true),
             _ => assert!(false, "Se esperaba una consulta de tipo INSERT"),
         }
     }
@@ -263,9 +263,5 @@ mod tests {
         let resultado = SQLConsulta::crear_consulta(&consulta, &ruta_tablas);
 
         assert!(resultado.is_err());
-        match resultado.unwrap() {
-            SQLConsulta::Select(_) => assert!(true),
-            _ => assert!(false, "Se esperaba una consulta válida"),
-        }
     }
 }

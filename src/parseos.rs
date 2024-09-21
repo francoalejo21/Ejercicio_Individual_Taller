@@ -1,6 +1,7 @@
+const COMILLAS_SIMPLES: &str = "'";
+const ESPACIO: &str = " ";
+
 pub fn parseo(condiciones: &Vec<String>, caracteres: &[char]) -> Vec<String> {
-    // Operadores que no deben estar separados de los operandos
-    //let operadores_que_no_tienen_que_estar_separados_operando: Vec<char> = vec!['=', '>', '<', '(', ')'];
 
     // Vector para almacenar los tokens resultantes
     let mut tokens: Vec<String> = Vec::new();
@@ -40,4 +41,48 @@ pub fn parseo(condiciones: &Vec<String>, caracteres: &[char]) -> Vec<String> {
     }
 
     tokens
+}
+
+pub fn unir_literales_spliteados(consulta_spliteada: &Vec<String>) -> Vec<String> {
+    let mut valores: Vec<String> = Vec::new();
+    let mut literal: Vec<String> = Vec::new();
+    let mut parado_en_literal = false;
+
+    for campo in consulta_spliteada {
+        if campo.starts_with(COMILLAS_SIMPLES) && campo.ends_with(COMILLAS_SIMPLES) && campo.len() > 1 {
+            // Literal completo, lo agregamos directamente
+            valores.push(campo.to_string());
+        } else if campo.starts_with(COMILLAS_SIMPLES) && !parado_en_literal {
+            // Empieza un nuevo literal
+            literal.push(campo.to_string());
+            parado_en_literal = true;
+        } else if campo.ends_with(COMILLAS_SIMPLES) && parado_en_literal {
+            // Termina el literal actual
+            literal.push(campo.to_string());
+            valores.push(literal.join(ESPACIO));  // Une todo el literal
+            literal.clear();
+            parado_en_literal = false;
+        } else if parado_en_literal {
+            // Parte de un literal en proceso de unión
+            literal.push(campo.to_string());
+        } else {
+            // Campo normal que no es un literal
+            valores.push(campo.to_string());
+        }
+    }
+
+    // Si el literal no se cerró correctamente, lo agregamos igual
+    if !literal.is_empty() {
+        valores.push(literal.join(ESPACIO));
+    }
+
+    valores
+}
+
+pub fn remover_comillas(valor :&String)->String{
+    let mut valor_parseado = valor.to_string();
+    if valor_parseado.starts_with(COMILLAS_SIMPLES) && valor_parseado.ends_with(COMILLAS_SIMPLES) {
+        valor_parseado = valor_parseado[1..valor_parseado.len()-1].to_string();
+    }
+    valor_parseado
 }
