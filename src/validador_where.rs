@@ -11,7 +11,7 @@ pub struct ValidadorSintaxis {
 
 impl ValidadorSintaxis {
     pub fn new(_tokens: &Vec<String>) -> Self {
-        let operadores_binarios = vec!["and", "or", "=", ">", "<"]
+        let operadores_binarios = vec!["and", "or", "=", ">", "<", ">=", "<="]
             .into_iter()
             .map(String::from)
             .collect();
@@ -54,7 +54,7 @@ impl ValidadorSintaxis {
                         return false;
                     }
                 }
-                "and" | "or" | ">" | "<" | "=" => {
+                "and" | "or" | ">" | "<" | "=" | ">=" | "<="=> {
                     if match ultimo_token {
                         None => true,
                         Some(ultimo) => {
@@ -76,7 +76,7 @@ impl ValidadorSintaxis {
                 _ => {
                     self.operandos.push(token.clone());
                     if let Some(ultimo) = ultimo_token {
-                        if !["(", "and", "or", "not", ">", "<", "="].contains(&ultimo) {
+                        if !["(", "and", "or", "not", ">=", "<=", ">", "<", "="].contains(&ultimo) {
                             return false;
                         }
                     }

@@ -2,6 +2,9 @@ use std::collections::HashMap;
 const COMILLAS_SIMPLES: &str = "'";
 const ESPACIO: &str = " ";
 const COMA: &str = ",";
+const MAYOR: &str = ">";
+const MENOR: &str = "<";
+const IGUAL: &str = "=";
 
 pub fn parseo(condiciones: &Vec<String>, caracteres: &[char]) -> Vec<String> {
     // Vector para almacenar los tokens resultantes
@@ -152,4 +155,42 @@ pub fn convertir_lower_case_restricciones(
 
 fn es_literal(operando: &str) -> bool {
     operando.starts_with(COMILLAS_SIMPLES) && operando.ends_with(COMILLAS_SIMPLES)
+}
+
+pub fn unir_operadores_que_deben_ir_juntos(consulta_spliteada: &Vec<String>) -> Vec<String> {
+    //si se encuentran operadores > y = se unen en >= o si se encuentran operadores < y = se unen en <=
+    let mut consulta_unida: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < consulta_spliteada.len() {
+        let campo = consulta_spliteada[i].to_string();
+        if i + 1 < consulta_spliteada.len() {
+            let siguiente_campo = consulta_spliteada[i + 1].to_string();
+            if (campo == MAYOR && siguiente_campo == IGUAL) || (campo == MENOR && siguiente_campo == IGUAL) {
+                consulta_unida.push(format!("{}{}", campo, siguiente_campo));
+                i += 1;
+            } else {
+                consulta_unida.push(campo);
+            }
+        } else {
+            consulta_unida.push(campo);
+        }
+        i += 1;
+    }
+    consulta_unida
+}
+
+mod tests{
+    use super::*;
+
+    #[test]
+        fn unir_operadores_que_deben_ir_juntos(){
+            let consulta = "select * from tabla where campo1 <= campo2 and campo3 = campo4 and campo5 <= campo6";
+            let consulta : Vec<String> = consulta.split_whitespace().map(|c| c.to_string()).collect();
+            let caracteres :Vec<char> = vec!['=', '<', '>'];
+            let consulta_spliteada = parseo(&consulta, &caracteres);
+            println!("{:?}", consulta_spliteada);
+            let consulta_unida = super::unir_operadores_que_deben_ir_juntos(&consulta_spliteada);
+            println!("{:?}", consulta_unida);
+            assert_eq!(consulta_unida, vec!["select", "*", "from", "tabla", "where", "campo1", "<=", "campo2", "and", "campo3", "=", "campo4", "and", "campo5", "<=", "campo6"]);
+        }
 }

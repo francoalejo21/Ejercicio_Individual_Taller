@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::vec::Vec;
 
+const MAYOR_IGUAL: &str = ">=";
+const MENOR_IGUAL: &str = "<=";
 const IGUAL: &str = "=";
 const MAYOR: &str = ">";
 const MENOR: &str = "<";
@@ -84,7 +86,7 @@ impl ArbolExpresiones {
 
     fn prioridad(&self, caracter: &str) -> u8 {
         match caracter {
-            IGUAL | MAYOR | MENOR => 4,
+            IGUAL | MAYOR | MENOR | MAYOR_IGUAL | MENOR_IGUAL=> 4,
             NOT => 3,
             AND => 2,
             OR => 1,
@@ -95,7 +97,7 @@ impl ArbolExpresiones {
     fn es_operador(&self, caracter: &str) -> bool {
         matches!(
             caracter,
-            PARENTESIS_APERTURA | PARENTESIS_CIERRE | IGUAL | MAYOR | MENOR | NOT | AND | OR
+            PARENTESIS_APERTURA | PARENTESIS_CIERRE | IGUAL | MAYOR | MENOR | MAYOR_IGUAL| MENOR_IGUAL | NOT | AND | OR
         )
     }
 
@@ -315,6 +317,14 @@ impl ArbolExpresiones {
 
         match operador {
             NOT => (dato_izq, !booleano_izq),
+            MAYOR_IGUAL => (
+                TiposDatos::String(CARACTER_VACIO.to_string()),
+                dato_izq >= dato_der,
+            ),
+            MENOR_IGUAL => (
+                TiposDatos::String(CARACTER_VACIO.to_string()),
+                dato_izq <= dato_der,
+            ),
             IGUAL => (
                 TiposDatos::String(CARACTER_VACIO.to_string()),
                 dato_izq == dato_der,

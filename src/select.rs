@@ -6,7 +6,7 @@ use crate::consulta::{
 
 use crate::abe::ArbolExpresiones;
 use crate::parseos::{
-    convertir_lower_case_restricciones, eliminar_comas, parseo, unir_literales_spliteados,
+    convertir_lower_case_restricciones, eliminar_comas, parseo, unir_literales_spliteados, unir_operadores_que_deben_ir_juntos,
 };
 use crate::validador_where::ValidadorOperandosValidos;
 use crate::{errores, validador_where::ValidadorSintaxis};
@@ -86,6 +86,8 @@ impl ConsultaSelect {
         Self::verificar_orden_keywords(consulta, palabras_reservadas)?;
         let consulta_spliteada = &parseo(consulta, CARACTERES_DELIMITADORES);
         let consulta = &unir_literales_spliteados(consulta_spliteada);
+        let consulta: &Vec<String> = &unir_operadores_que_deben_ir_juntos(consulta);
+        println!("{:?}", consulta);
         let campos_consulta = Self::parsear_cualquier_cosa(
             consulta,
             vec![String::from(SELECT)],
