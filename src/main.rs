@@ -1,14 +1,13 @@
-mod verificaciones_sintaxis;
-mod parseos;
 mod abe;
-mod validador_where;
 mod archivo;
 mod consulta;
 mod delete;
 mod errores;
 mod insert;
+mod parseos;
 mod select;
 mod update;
+mod validador_where;
 
 /// Función principal que se encarga de manejar la ejecución del programa.
 ///

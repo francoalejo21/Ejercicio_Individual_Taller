@@ -1,48 +1,31 @@
+use crate::abe::ArbolExpresiones;
 use crate::archivo::{leer_archivo, parsear_linea_archivo, procesar_ruta};
 use crate::consulta::{mapear_campos, MetodosConsulta, Parseables, Verificaciones};
-use crate::validador_where::ValidadorSintaxis;
-use crate::verificaciones_sintaxis::verificar_orden_keywords;
-use std::collections::HashSet;
-use crate::select::convertir_lower_case_restricciones;
-use crate::validador_where::ValidadorOperandosValidos;
-use std::fs;
-use std::io::BufReader;
-use crate::abe::ArbolExpresiones;
 use crate::errores;
-use crate::parseos::{parseo,unir_literales_spliteados};
+use crate::parseos::{convertir_lower_case_restricciones, parseo, unir_literales_spliteados};
+use crate::validador_where::ValidadorOperandosValidos;
+use crate::validador_where::ValidadorSintaxis;
+use std::collections::HashSet;
+use std::fs;
 use std::fs::File;
+use std::io::BufReader;
 use std::path::Path;
 use std::{
     collections::HashMap,
     io::{BufRead, BufWriter, Write},
 };
 
-const CARACTERES_DELIMITADORES: &[char] = &[';',',','=','<','>','(',')'];
+const CARACTERES_DELIMITADORES: &[char] = &[';', ',', '=', '<', '>', '(', ')'];
 const DELETE: &str = "delete";
 const FROM: &str = "from";
 const WHERE: &str = "where";
 const CARACTER_VACIO: &str = "";
 const PUNTO_COMA: &str = ";";
 
-/// Representa una consulta SQL de inserción.
-///
-/// Esta estructura contiene la información necesaria para realizar una consulta
-/// de inserción en una base de datos. Incluye los campos a insertar, los valores a
-/// insertar, la tabla en la que se insertarán los datos y la ruta del archivo
-/// que se actualizará.
-///
-/// # Campos
-///
-/// - `campos_consulta`: Un vector de cadenas de texto (`Vec<String>`) que especifica
-///   los campos en los que se van a insertar los datos.
-/// - `campos_posibles`: Un mapa (`HashMap<String, usize>`) que asocia los nombres de los
-///   campos de la tabla con sus índices. Este mapa permite la validación de campos.
-/// - `valores`: Un vector de vectores de cadenas de texto (`Vec<Vec<String>>`) que contiene
-///   los valores a insertar en los campos especificados.
-/// - `tabla`: Una cadena de texto (`String`) que indica el nombre de la tabla en la
-///   que se van a insertar los datos.
-/// - `ruta_tabla`: Una cadena de texto (`String`) que indica la ruta del archivo que
-///   se actualizará con los datos insertados.
+/// Estructura que representa una consulta SQL de tipo DELETE.
+/// Contiene los campos posibles a eliminar, la tabla en la que se van a eliminar los datos, la ruta del archivo tabla a modificar y las condiciones
+/// que deben cumplir los datos a eliminar.
+
 #[derive(Debug)]
 pub struct ConsultaDelete {
     pub campos_posibles: HashMap<String, usize>,
@@ -52,27 +35,46 @@ pub struct ConsultaDelete {
 }
 
 impl ConsultaDelete {
-    /// Crea una nueva instancia de `ConsultaInsert` a partir de una cadena de consulta SQL.
-    ///
-    /// Procesa la consulta SQL para extraer los campos donde insertar, los valores a insertar en dichos campos, la tabla en la que se van a insertar
-    /// los datos, y la ruta del archivo tabla a modificar.
+    /// Crea una nueva consulta de tipo DELETE con los campos posibles a eliminar, la tabla en la que se van a eliminar los datos, la ruta del archivo tabla a modificar y las condiciones
+    /// que deben cumplir los datos a eliminar.
+    /// Verifica la validez de la consulta en el sentido de si las keywords estan correctamente ingresadas
+    /// y si la consulta cumple con la sintaxis de DELETE FROM WHERE.
     ///
     /// # Parámetros
-    /// - `consulta`: La consulta SQL en formato `String`.
-    /// - `ruta`: La ruta del archivo en el que se van a insertar los datos.
+    /// - `consulta`: Un `Vec<String>` que contiene las palabras de la consulta SQL.
+    /// - `ruta_a_tablas`: Un `String` que contiene la ruta de la tabla a modificar.
     ///
     /// # Retorno
-    /// Una instancia de `ConsultaDelete` si la consulta es válida, o un error de tipo `Errores`.
+    /// Retorna un `Result` que indica el éxito (`Ok`), entonces devuelve una consulta de tipo DELETE, o el tipo de error (`Err`).
 
-    pub fn crear(consulta: &Vec<String>, ruta_a_tablas: &String) -> Result<ConsultaDelete,errores::Errores> {
-        let palabras_reservadas = vec![DELETE, FROM, WHERE];  
-        verificar_orden_keywords(consulta, palabras_reservadas)?;
+    pub fn crear(
+        consulta: &Vec<String>,
+        ruta_a_tablas: &String,
+    ) -> Result<ConsultaDelete, errores::Errores> {
+        let palabras_reservadas = vec![DELETE, FROM, WHERE];
+        Self::verificar_orden_keywords(consulta, palabras_reservadas)?;
         let consulta_spliteada = &parseo(consulta, CARACTERES_DELIMITADORES);
         let consulta_spliteada = &unir_literales_spliteados(consulta_spliteada);
-        let tabla = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from(DELETE), String::from(FROM)], HashSet::from([WHERE.to_string(), CARACTER_VACIO.to_string(), PUNTO_COMA.to_string()]), false, false)?;        
+        let tabla = Self::parsear_cualquier_cosa(
+            consulta_spliteada,
+            vec![String::from(DELETE), String::from(FROM)],
+            HashSet::from([
+                WHERE.to_string(),
+                CARACTER_VACIO.to_string(),
+                PUNTO_COMA.to_string(),
+            ]),
+            false,
+            false,
+        )?;
         let campos_posibles: HashMap<String, usize> = HashMap::new();
-        let ruta_tabla = ruta_a_tablas.to_string(); 
-        let condiciones: Vec<String> = Self::parsear_cualquier_cosa(consulta_spliteada, vec![String::from(WHERE)], HashSet::from([CARACTER_VACIO.to_string(),PUNTO_COMA.to_string()]), false, true)?;
+        let ruta_tabla = ruta_a_tablas.to_string();
+        let condiciones: Vec<String> = Self::parsear_cualquier_cosa(
+            consulta_spliteada,
+            vec![String::from(WHERE)],
+            HashSet::from([CARACTER_VACIO.to_string(), PUNTO_COMA.to_string()]),
+            false,
+            true,
+        )?;
         Ok(ConsultaDelete {
             campos_posibles,
             tabla,
@@ -82,15 +84,13 @@ impl ConsultaDelete {
     }
 }
 
-impl Parseables for ConsultaDelete {
-
-}
+impl Parseables for ConsultaDelete {}
 
 impl MetodosConsulta for ConsultaDelete {
-    /// Verifica la validez de la consulta SQL.
-    ///TODO: verificar la validez de los valores a ingresar
-    /// verifica que la tabla a la que se quiere inserta exista, así como los campos de la consulta no estén vacíos
-    /// y que todos los campos solicitados sean válidos según los campos posibles definidos en la estructura.
+    /// Verifica la validez de la consulta DELETE.
+    /// Verifica que la consulta tenga un solo nombre de tabla, que la ruta de la tabla sea válida, que la tabla exista y que las condiciones de la consulta sean válidas.
+    /// que las condiciones de la consulta sean válidas, como tambien los operandos de las condiciones.
+    ///
     /// # Retorno
     /// Retorna un `Result` que indica el éxito (`Ok`) o el tipo de error (`Err`).
 
@@ -99,33 +99,34 @@ impl MetodosConsulta for ConsultaDelete {
             Err(errores::Errores::InvalidSyntax)?;
         }
         self.ruta_tabla = procesar_ruta(&self.ruta_tabla, &self.tabla[0]);
-        let mut lector = leer_archivo(&self.ruta_tabla).map_err(|_| errores::Errores::InvalidTable)?;
+        let mut lector =
+            leer_archivo(&self.ruta_tabla).map_err(|_| errores::Errores::InvalidTable)?;
         let mut nombres_campos = String::new();
-        lector.read_line(&mut nombres_campos).map_err(|_| errores::Errores::Error)?;
-        
+        lector
+            .read_line(&mut nombres_campos)
+            .map_err(|_| errores::Errores::Error)?;
+
         let (_, campos_validos) = parsear_linea_archivo(&nombres_campos);
-        self.campos_posibles = mapear_campos(&campos_validos);                
-        
+        self.campos_posibles = mapear_campos(&campos_validos);
+
         //verificamos que la condicion where sea valida y los operandos sean validos
-        self.condiciones = convertir_lower_case_restricciones(&self.condiciones, &self.campos_posibles);
+        self.condiciones =
+            convertir_lower_case_restricciones(&self.condiciones, &self.campos_posibles);
         let mut validador_where = ValidadorSintaxis::new(&self.condiciones);
-        if !self.condiciones.is_empty(){
-            if !validador_where.validar(){
+        if !self.condiciones.is_empty() {
+            if !validador_where.validar() {
                 return Err(errores::Errores::InvalidSyntax);
             }
             let operandos = validador_where.obtener_operandos();
-            let validador_operandos_validos = ValidadorOperandosValidos::new(&operandos, &self.campos_posibles);
+            let validador_operandos_validos =
+                ValidadorOperandosValidos::new(&operandos, &self.campos_posibles);
             validador_operandos_validos.validar()?;
         }
         Ok(())
     }
 
-    /// Procesa el contenido de la consulta y agrega los valores al archivo correspondiente.
-    ///
-    /// Abre el archivo en modo append y escribe los valores de la consulta al final del archivo.
-    ///
-    /// # Parámetros
-    /// - `lector`: Un `BufReader<File>` que proporciona acceso al archivo.
+    /// Procesa la consulta DELETE.
+    /// Lee el archivo de la tabla a modificar, crea un archivo temporal para escribir los cambios, elimina las líneas que cumplen con las condiciones de la consulta y reemplaza el archivo original con el archivo temporal.
     ///
     /// # Retorno
     /// Retorna un `Result` que indica el éxito (`Ok`) o el tipo de error (`Err`).
@@ -145,7 +146,7 @@ impl MetodosConsulta for ConsultaDelete {
 
         for linea in lector.lines() {
             let linea = linea.map_err(|_| errores::Errores::Error)?;
-            let (campos,_) = parsear_linea_archivo(&linea);
+            let (campos, _) = parsear_linea_archivo(&linea);
 
             // Si no hay condiciones, eliminar todas las líneas
             if arbol_exp.arbol_vacio() {
@@ -155,7 +156,7 @@ impl MetodosConsulta for ConsultaDelete {
             // Verificar si la línea cumple con las condiciones WHERE
             if arbol_exp.evalua(&self.campos_posibles, &campos) {
                 // La línea cumple con las condiciones, no escribirla en el archivo temporal
-                eliminados+=1;
+                eliminados += 1;
             } else {
                 // La línea no cumple con las condiciones, escribirla en el archivo temporal
                 writeln!(escritor, "{}", linea).map_err(|_| errores::Errores::Error)?;
@@ -174,6 +175,16 @@ impl MetodosConsulta for ConsultaDelete {
 }
 
 impl Verificaciones for ConsultaDelete {
+    /// Verifica que los campos de la consulta DELETE sean válidos.
+    /// Para esto se verifica que los campos de la consulta estén en el Hashmap de campos válidos.
+    ///
+    /// Parámetros:
+    /// - `campos_validos`: Un `HashMap<String, usize>` que contiene los campos válidos.
+    /// - `campos_consulta`: Un `Vec<String>` que contiene los campos de la consulta.
+    ///
+    /// Retorno:
+    /// Retorna un `bool` que indica si los campos de la consulta son válidos (`true`) o no (`false`).
+
     fn verificar_campos_validos(
         campos_validos: &HashMap<String, usize>,
         campos_consulta: &mut Vec<String>,
@@ -184,5 +195,73 @@ impl Verificaciones for ConsultaDelete {
             }
         }
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::errores::Errores;
+
+    #[test]
+    fn test_crear_consulta_delete_valida() {
+        let consulta = vec![
+            "delete".to_string(),
+            "from".to_string(),
+            "tabla".to_string(),
+            "where".to_string(),
+            "campo".to_string(),
+            "=".to_string(),
+            "valor".to_string(),
+        ];
+        let ruta_a_tablas = "ruta/a/tablas".to_string();
+        let resultado = ConsultaDelete::crear(&consulta, &ruta_a_tablas);
+        assert!(resultado.is_ok());
+    }
+
+    #[test]
+    fn test_crear_consulta_delete_invalida_sintaxis() {
+        let consulta = vec![
+            "delete".to_string(),
+            "tabla".to_string(),
+            "from".to_string(),
+            "where".to_string(),
+            "campo".to_string(),
+            "=".to_string(),
+            "valor".to_string(),
+        ];
+        let ruta_a_tablas = "ruta/a/tablas".to_string();
+        let resultado = ConsultaDelete::crear(&consulta, &ruta_a_tablas);
+        assert!(matches!(resultado, Err(Errores::InvalidSyntax)));
+    }
+
+    #[test]
+    fn test_verificar_validez_consulta_tabla_inexistente() {
+        let mut consulta_delete = ConsultaDelete {
+            campos_posibles: HashMap::new(),
+            tabla: vec!["tabla_inexistente".to_string()],
+            ruta_tabla: "ruta/a/tablas".to_string(),
+            condiciones: vec!["campo = valor".to_string()],
+        };
+        let resultado = consulta_delete.verificar_validez_consulta();
+        assert!(matches!(resultado, Err(Errores::InvalidTable)));
+    }
+
+    #[test]
+    fn test_verificar_campos_validos() {
+        let campos_validos = HashMap::from([("campo1".to_string(), 0), ("campo2".to_string(), 1)]);
+        let mut campos_consulta = vec!["campo1".to_string(), "campo2".to_string()];
+        let resultado =
+            ConsultaDelete::verificar_campos_validos(&campos_validos, &mut campos_consulta);
+        assert!(resultado);
+    }
+
+    #[test]
+    fn test_verificar_campos_invalidos() {
+        let campos_validos = HashMap::from([("campo1".to_string(), 0), ("campo2".to_string(), 1)]);
+        let mut campos_consulta = vec!["campo1".to_string(), "campo3".to_string()];
+        let resultado =
+            ConsultaDelete::verificar_campos_validos(&campos_validos, &mut campos_consulta);
+        assert!(!resultado);
     }
 }
