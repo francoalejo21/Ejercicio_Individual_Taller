@@ -87,7 +87,6 @@ impl ConsultaSelect {
         let consulta_spliteada = &parseo(consulta, CARACTERES_DELIMITADORES);
         let consulta = &unir_literales_spliteados(consulta_spliteada);
         let consulta: &Vec<String> = &unir_operadores_que_deben_ir_juntos(consulta);
-        println!("{:?}", consulta);
         let campos_consulta = Self::parsear_cualquier_cosa(
             consulta,
             vec![String::from(SELECT)],
@@ -202,7 +201,7 @@ impl MetodosConsulta for ConsultaSelect {
         lector
             .read_line(&mut nombres_campos)
             .map_err(|_| errores::Errores::Error)?;
-
+        println!("{}", self.campos_consulta.join(","));
         let mut arbol_exp = ArbolExpresiones::new();
         arbol_exp.crear_abe(&self.restricciones);
 
@@ -225,7 +224,7 @@ impl MetodosConsulta for ConsultaSelect {
 
             if !arbol_exp.arbol_vacio()
                 && !arbol_exp.evalua(&self.campos_posibles, &registro_parseado)
-            {
+            {   
                 continue;
             }
             seleccionados += 1;
@@ -432,15 +431,18 @@ fn reemplazar_string_por_usize(
 fn ordenar_campos_multiples(filas: &mut [Vec<String>], columnas_orden: Vec<(usize, bool)>) {
     filas.sort_by(|a, b| {
         for (columna_orden, ascendente) in &columnas_orden {
+            if *columna_orden >= a.len() || *columna_orden >= b.len() {
+                continue;
+            }
+
             let valor_a = &a[*columna_orden];
             let valor_b = &b[*columna_orden];
 
-            // Comparación adicional si alguna columna es vacía
             let cmp = match (valor_a.is_empty(), valor_b.is_empty()) {
-                (true, false) => std::cmp::Ordering::Less, // La columna vacía es menor
-                (false, true) => std::cmp::Ordering::Greater, // La columna vacía es mayor
-                (true, true) => std::cmp::Ordering::Equal, // Ambas son vacías, son iguales
-                _ => valor_a.cmp(valor_b), // Comparar normalmente si no están vacías
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                (true, true) => std::cmp::Ordering::Equal,
+                _ => valor_a.cmp(valor_b),
             };
 
             if cmp != std::cmp::Ordering::Equal {
