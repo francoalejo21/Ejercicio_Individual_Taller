@@ -4,6 +4,7 @@ use crate::consulta::{mapear_campos, MetodosConsulta, Parseables, Verificaciones
 use crate::errores;
 use crate::parseos::{
     convertir_lower_case_restricciones, parseo, remover_comillas, unir_literales_spliteados,
+    unir_operadores_que_deben_ir_juntos,
 };
 use crate::validador_where::ValidadorOperandosValidos;
 use crate::validador_where::ValidadorSintaxis;
@@ -80,6 +81,7 @@ impl ConsultaUpdate {
         Self::verificar_orden_keywords(consulta, palabras_reservadas)?;
         let consulta_spliteada = &parseo(consulta, CARACTERES_DELIMITADORES);
         let consulta_spliteada = &unir_literales_spliteados(consulta_spliteada);
+        let consulta_spliteada = &unir_operadores_que_deben_ir_juntos(consulta_spliteada);
         let tabla = Self::parsear_cualquier_cosa(
             consulta_spliteada,
             vec![String::from(UPDATE)],

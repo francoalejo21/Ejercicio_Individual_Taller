@@ -6,7 +6,8 @@ use crate::consulta::{
 
 use crate::abe::ArbolExpresiones;
 use crate::parseos::{
-    convertir_lower_case_restricciones, eliminar_comas, parseo, unir_literales_spliteados, unir_operadores_que_deben_ir_juntos,
+    convertir_lower_case_restricciones, eliminar_comas, parseo, unir_literales_spliteados,
+    unir_operadores_que_deben_ir_juntos,
 };
 use crate::validador_where::ValidadorOperandosValidos;
 use crate::{errores, validador_where::ValidadorSintaxis};
@@ -224,7 +225,7 @@ impl MetodosConsulta for ConsultaSelect {
 
             if !arbol_exp.arbol_vacio()
                 && !arbol_exp.evalua(&self.campos_posibles, &registro_parseado)
-            {   
+            {
                 continue;
             }
             seleccionados += 1;

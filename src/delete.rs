@@ -2,7 +2,10 @@ use crate::abe::ArbolExpresiones;
 use crate::archivo::{leer_archivo, parsear_linea_archivo, procesar_ruta};
 use crate::consulta::{mapear_campos, MetodosConsulta, Parseables, Verificaciones};
 use crate::errores;
-use crate::parseos::{convertir_lower_case_restricciones, parseo, unir_literales_spliteados};
+use crate::parseos::{
+    convertir_lower_case_restricciones, parseo, unir_literales_spliteados,
+    unir_operadores_que_deben_ir_juntos,
+};
 use crate::validador_where::ValidadorOperandosValidos;
 use crate::validador_where::ValidadorSintaxis;
 use std::collections::HashSet;
@@ -55,6 +58,7 @@ impl ConsultaDelete {
         Self::verificar_orden_keywords(consulta, palabras_reservadas)?;
         let consulta_spliteada = &parseo(consulta, CARACTERES_DELIMITADORES);
         let consulta_spliteada = &unir_literales_spliteados(consulta_spliteada);
+        let consulta_spliteada = &unir_operadores_que_deben_ir_juntos(consulta_spliteada);
         let tabla = Self::parsear_cualquier_cosa(
             consulta_spliteada,
             vec![String::from(DELETE), String::from(FROM)],

@@ -86,7 +86,7 @@ impl ArbolExpresiones {
 
     fn prioridad(&self, caracter: &str) -> u8 {
         match caracter {
-            IGUAL | MAYOR | MENOR | MAYOR_IGUAL | MENOR_IGUAL=> 4,
+            IGUAL | MAYOR | MENOR | MAYOR_IGUAL | MENOR_IGUAL => 4,
             NOT => 3,
             AND => 2,
             OR => 1,
@@ -97,7 +97,16 @@ impl ArbolExpresiones {
     fn es_operador(&self, caracter: &str) -> bool {
         matches!(
             caracter,
-            PARENTESIS_APERTURA | PARENTESIS_CIERRE | IGUAL | MAYOR | MENOR | MAYOR_IGUAL| MENOR_IGUAL | NOT | AND | OR
+            PARENTESIS_APERTURA
+                | PARENTESIS_CIERRE
+                | IGUAL
+                | MAYOR
+                | MENOR
+                | MAYOR_IGUAL
+                | MENOR_IGUAL
+                | NOT
+                | AND
+                | OR
         )
     }
 
@@ -311,12 +320,11 @@ impl ArbolExpresiones {
         };
 
         let (dato_der, booleano_der) = match sub_arbol.derecho.as_ref() {
-            Some(derecho) => {
-                self.evalua_expresion(derecho, campos_mapeados, campos_fila_actual)
-            },
+            Some(derecho) => self.evalua_expresion(derecho, campos_mapeados, campos_fila_actual),
             None => {
                 if operador != NOT {
-                    return (TiposDatos::String(CARACTER_VACIO.to_string()), true) // Manejo del caso None
+                    return (TiposDatos::String(CARACTER_VACIO.to_string()), true);
+                    // Manejo del caso None
                 }
                 (TiposDatos::String(CARACTER_VACIO.to_string()), true)
             }

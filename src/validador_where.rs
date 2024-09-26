@@ -54,7 +54,7 @@ impl ValidadorSintaxis {
                         return false;
                     }
                 }
-                "and" | "or" | ">" | "<" | "=" | ">=" | "<="=> {
+                "and" | "or" | ">" | "<" | "=" | ">=" | "<=" => {
                     if match ultimo_token {
                         None => true,
                         Some(ultimo) => {
