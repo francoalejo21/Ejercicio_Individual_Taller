@@ -26,16 +26,16 @@ impl Errores {
     pub fn imprimir_desc(self) {
         match self {
             Errores::InvalidSyntax => {
-                println!("[INVALID_SYNTAX] : [sintaxis invalida, por favor ingresa correctamente la consulta]")
+                println!("INVALID_SYNTAX : sintaxis invalida, por favor ingresa correctamente la consulta")
             }
             Errores::InvalidTable => {
-                println!("[INVALID_TABLE] : [tabla invalida o no existe]")
+                println!("INVALID_TABLE : tabla invalida o no existe")
             }
             Errores::InvalidColumn => {
-                println!("[INVALID_COLUMN] : [columna invalida, por favor ingrese un campo válido]")
+                println!("INVALID_COLUMN : columna invalida, por favor ingrese un campo válido")
             }
             Errores::Error => {
-                println!("[ERROR] : [Error, se produjo un error al procesar la consulta]")
+                println!("ERROR : Error, se produjo un error al procesar la consulta")
             }
         }
     }
