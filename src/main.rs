@@ -1,10 +1,13 @@
+mod abe;
 mod archivo;
 mod consulta;
 mod delete;
 mod errores;
 mod insert;
+mod parseos;
 mod select;
 mod update;
+mod validador_where;
 
 /// Función principal que se encarga de manejar la ejecución del programa.
 ///
@@ -41,8 +44,7 @@ fn ejecutar() -> Result<(), errores::Errores> {
     let consulta_sin_parsear = &args[2];
 
     let mut consulta = consulta::SQLConsulta::crear_consulta(consulta_sin_parsear, ruta_tablas)
-        .map_err(|_| errores::Errores::Error)?;
-
+        .map_err(|_| errores::Errores::InvalidSyntax)?;
     consulta.procesar_consulta()?;
     Ok(())
 }
